@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useConfigStore } from "../../stores/configStore";
 import { hasApiKey } from "../../lib/ipc";
+import { LocalModelManager } from "../../settings/LocalModelManager";
 import type { STTProviderType, MeetingAudioConfig } from "../../lib/types";
 import {
   Globe,
@@ -121,11 +122,12 @@ export function STTSetupStep() {
       </div>
 
       <div className="w-full max-w-lg space-y-6">
-        {/* Recommended free setup banner */}
+        {/* Recommended desktop companion setup */}
         <div className="rounded-xl border border-success/20 bg-success/5 px-4 py-3">
           <p className="text-xs text-success leading-relaxed">
-            <strong>Recommended (Free):</strong> Web Speech for You + Windows
-            Native for Them. No API keys needed!
+            <strong>Recommended (Local):</strong> Whisper.cpp for Them reads the
+            selected system output through WASAPI loopback. Download Tiny or
+            Base below; no meeting input or API key is required.
           </p>
         </div>
 
@@ -170,8 +172,18 @@ export function STTSetupStep() {
             ))}
           </div>
           <p className="mt-1 text-meta text-muted-foreground">
-            Web Speech API is not available for "Them" — it only works with the browser's microphone.
+            For Tencent Meeting/Teams, choose a local or cloud provider here;
+            the system output is captured by the desktop app and shown in the overlay.
           </p>
+
+          {themSTT === "whisper_cpp" && (
+            <div className="mt-3 rounded-xl border border-border/30 bg-secondary/10 p-3">
+              <p className="mb-2 text-xs font-medium text-foreground">
+                Whisper.cpp model
+              </p>
+              <LocalModelManager compact engineFilter="whisper_cpp" />
+            </div>
+          )}
         </div>
       </div>
     </div>

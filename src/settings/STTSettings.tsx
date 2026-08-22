@@ -92,12 +92,11 @@ const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     value: "whisper_cpp",
     label: "Whisper.cpp",
-    description: "Batch transcription of recorded meetings",
+    description: "Local streaming, offline, free",
     requiresApiKey: false,
     isLocal: true,
     credentialKey: "",
     requiresModels: "whisper_cpp",
-    batchOnly: true,
   },
   {
     value: "parakeet_tdt",
@@ -600,23 +599,10 @@ export function STTSettings() {
           <h3 className="mb-1 text-sm font-semibold text-primary/80 flex items-center gap-1.5">
             <HardDrive className="h-4 w-4" />
             {currentProviderOption?.label} Models
-            {currentProviderOption?.batchOnly && (
-              <span className="ml-1 rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-meta font-semibold text-warning uppercase tracking-wide">
-                Batch
-              </span>
-            )}
           </h3>
-          {currentProviderOption?.batchOnly && (
-            <p className="mb-3 text-xs text-muted-foreground/70">
-              Whisper.cpp is for post-meeting batch transcription only — not live streaming.
-              It will be available in the "Past Meetings" tab.
-            </p>
-          )}
-          {!currentProviderOption?.batchOnly && (
-            <p className="mb-3 text-xs text-muted-foreground">
-              Download a model, then click <strong>Activate</strong> to enable this provider.
-            </p>
-          )}
+          <p className="mb-3 text-xs text-muted-foreground">
+            Download a model, then click <strong>Activate</strong> to enable this provider.
+          </p>
           <LocalModelManager engineFilter={modelEngineId} />
         </div>
       )}
@@ -842,7 +828,7 @@ function ProviderCard({
         />
       </div>
       <span className="text-meta text-muted-foreground/70 line-clamp-1 leading-tight">
-        {provider.batchOnly ? "Batch mode only" : provider.description}
+        {provider.description}
       </span>
     </button>
   );

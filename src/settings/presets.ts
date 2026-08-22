@@ -26,10 +26,11 @@ export type DeviceHint =
 export const BUILT_IN_PRESETS: MeetingPreset[] = [
   {
     name: "Zero Setup",
-    description: "Web Speech + Windows built-in — works instantly",
+    description: "Web Speech + local Whisper — download a small model",
     badge: "Default",
     you: { hint: "default_mic", stt: "web_speech" },
-    them: { hint: "default_output", stt: "windows_native" },
+    them: { hint: "default_output", stt: "whisper_cpp" },
+    requiresDownload: "whisper_cpp",
   },
   {
     name: "Best Quality",

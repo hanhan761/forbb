@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { BUILT_IN_PRESETS, type MeetingPreset, applyPreset } from "./presets";
 
-// STT provider options — whisper_cpp excluded (batch-only, not for live STT)
+// STT provider options for live meeting audio.
 const STT_OPTIONS: {
   value: STTProviderType;
   label: string;
@@ -69,6 +69,15 @@ const STT_OPTIONS: {
     requiresKey: false,
     isCloud: false,
     inputOnly: true,
+  },
+  {
+    value: "whisper_cpp",
+    label: "Whisper.cpp (Local)",
+    shortLabel: "Whisper.cpp",
+    icon: <HardDrive className="h-3.5 w-3.5" />,
+    requiresKey: false,
+    isCloud: false,
+    requiresDownload: "whisper_cpp",
   },
   {
     value: "sherpa_onnx",
@@ -674,10 +683,11 @@ function PartyPanel({
 
   function handleProviderChange(newProvider: STTProviderType) {
     const updates: Partial<PartyAudioConfig> = { stt_provider: newProvider };
-    if (newProvider === "sherpa_onnx" || newProvider === "ort_streaming" || newProvider === "parakeet_tdt") {
+    if (newProvider === "whisper_cpp" || newProvider === "sherpa_onnx" || newProvider === "ort_streaming" || newProvider === "parakeet_tdt") {
       // Use per-engine active model, falling back to legacy activeWhisperModel
       const activeModelPerEngine = useConfigStore.getState().activeModelPerEngine;
       const DEFAULT_MODEL_PER_ENGINE: Record<string, string> = {
+        whisper_cpp: "tiny",
         sherpa_onnx: "streaming-zipformer-en-20M",
         ort_streaming: "zipformer-en-20M",
         parakeet_tdt: "parakeet-tdt-0.6b-v3-int8",

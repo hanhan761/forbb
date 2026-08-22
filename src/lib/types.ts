@@ -44,6 +44,10 @@ export interface TranscriptSegment {
   text: string;
   speaker: Speaker;
   speaker_id?: string;
+  /** Audio route that produced this segment (mic, system loopback, or room). */
+  source?: AudioSource;
+  /** BCP-47 language used by the STT provider, when available. */
+  language?: string;
   timestamp_ms: number;
   is_final: boolean;
   confidence: number;

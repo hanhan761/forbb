@@ -179,6 +179,7 @@ pub async fn start_capture(
                             "id": output.id,
                             "text": output.text,
                             "speaker": output.speaker,
+                            "source": "System",
                             "timestamp_ms": output.timestamp_ms,
                             "is_final": output.is_final,
                             "confidence": output.confidence
@@ -795,6 +796,12 @@ pub async fn start_capture_per_party(
 
     let state = app.state::<AppState>();
 
+    // Normalize source metadata once so every transcript event has the same
+    // shape for the overlay, translation pipeline, and future retrieval filters.
+    let you_source = if you.is_input_device { "Mic" } else { "System" };
+    let them_source = if them.is_input_device { "Room" } else { "System" };
+    let transcript_language = get_stt_language(&state);
+
     // If already capturing, stop first (allows mid-meeting hot-swap)
     {
         // Restore any previous IPolicyConfig override before hot-swap
@@ -948,9 +955,25 @@ pub async fn start_capture_per_party(
 
     // ── Create STT provider for "You" party (if not web_speech) ──
     let you_stt = create_stt_provider_for_party(&you, &state, &app, "You").await?;
+    if you.stt_provider != "web_speech" && you_stt.is_none() {
+        let _ = app.emit("stt_connection_status", serde_json::json!({
+            "provider": you.stt_provider,
+            "party": "You",
+            "status": "error",
+            "message": "No usable STT provider is available. Configure a key or download a local model."
+        }));
+    }
 
     // ── Create STT provider for "Them" party (if not web_speech) ──
     let them_stt = create_stt_provider_for_party(&them, &state, &app, "Them").await?;
+    if them.stt_provider != "web_speech" && them_stt.is_none() {
+        let _ = app.emit("stt_connection_status", serde_json::json!({
+            "provider": them.stt_provider,
+            "party": "Them",
+            "status": "error",
+            "message": "No usable STT provider is available. Download a Whisper.cpp model or configure a cloud key."
+        }));
+    }
 
     // Start STT streams
     let (you_stt_tx, mut you_stt_rx) =
@@ -1024,6 +1047,8 @@ pub async fn start_capture_per_party(
     if you_stt_provider.is_some() {
         let stt_app = app.clone();
         let prefix = session_prefix.clone();
+        let source = you_source;
+        let language = transcript_language.clone();
         let use_accumulator = you.stt_provider != "web_speech"
             && you.stt_provider != "whisper_cpp";
         let pause_threshold = if use_accumulator {
@@ -1056,6 +1081,8 @@ pub async fn start_capture_per_party(
                                 "id": seg_id,
                                 "text": output.text,
                                 "speaker": "User",
+                                "source": source,
+                                "language": language.clone(),
                                 "timestamp_ms": output.timestamp_ms,
                                 "is_final": output.is_final,
                                 "confidence": output.confidence
@@ -1073,6 +1100,8 @@ pub async fn start_capture_per_party(
                             "id": seg_id,
                             "text": output.text,
                             "speaker": "User",
+                            "source": source,
+                            "language": language.clone(),
                             "timestamp_ms": output.timestamp_ms,
                             "is_final": true,
                             "confidence": output.confidence
@@ -1106,6 +1135,8 @@ pub async fn start_capture_per_party(
                             "id": seg_id,
                             "text": result.text,
                             "speaker": "User",
+                            "source": source,
+                            "language": result.language.clone().unwrap_or_else(|| language.clone()),
                             "timestamp_ms": result.timestamp_ms,
                             "is_final": result.is_final,
                             "confidence": result.confidence
@@ -1123,6 +1154,8 @@ pub async fn start_capture_per_party(
     if them_stt_provider.is_some() {
         let stt_app = app.clone();
         let prefix = session_prefix.clone();
+        let source = them_source;
+        let language = transcript_language.clone();
         let intel_arc = app.state::<AppState>().intelligence.clone();
         let pause_threshold = app.state::<AppState>().pause_threshold_ms.clone();
         tokio::spawn(async move {
@@ -1155,6 +1188,8 @@ pub async fn start_capture_per_party(
                         "id": seg_id,
                         "text": output.text,
                         "speaker": "Them",
+                        "source": source,
+                        "language": language.clone(),
                         "timestamp_ms": output.timestamp_ms,
                         "is_final": output.is_final,
                         "confidence": output.confidence
@@ -1193,6 +1228,8 @@ pub async fn start_capture_per_party(
                     "id": seg_id,
                     "text": output.text,
                     "speaker": "Them",
+                    "source": source,
+                    "language": language.clone(),
                     "timestamp_ms": output.timestamp_ms,
                     "is_final": output.is_final,
                     "confidence": output.confidence
