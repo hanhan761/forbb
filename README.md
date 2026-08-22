@@ -25,6 +25,11 @@
 </p>
 <p align="center"><em>NexQ overlay during a live interview — real-time transcription and AI suggestions</em></p>
 
+<p align="center">
+  <img src="docs/assets/readme-feature-overview.png" alt="NexQ feature overview — system audio, live transcription, translation, and local knowledge base" width="900">
+</p>
+<p align="center"><em>System-audio loopback, live transcription, bilingual translation, and local knowledge retrieval in one assistive overlay</em></p>
+
 ### Why NexQ?
 
 🔒 **100% Local** — your audio and data never leave your machine
@@ -38,6 +43,7 @@
 - **Dual-party transcription** — captures mic ("You") and system audio ("Them") simultaneously
 - **Real-time AI copilot** — get streaming answers, follow-up suggestions, and meeting recaps from 8 LLM providers
 - **Local RAG pipeline** — index your own documents (PDF, DOCX, TXT, MD) for context-aware AI responses
+- **Obsidian Vault import** — bring a local Markdown Vault into the knowledge base without an Obsidian plugin
 - **Gemini Context Cache** — upload documents to Gemini once, skip local embedding entirely for ~3-5s faster queries
 - **10 STT providers** — Web Speech API, Deepgram, Groq, Whisper, ONNX Runtime, and more
 - **Always-on-top overlay** — compact, transparent floating window visible only to you
