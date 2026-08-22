@@ -155,6 +155,36 @@ impl RagManager {
                 .map_err(|e| format!("Failed to insert chunks for {}: {}", file_name, e))?;
         } // lock released before async work
 
+        // Keyword-only mode is the lightweight path: SQLite FTS5 is populated
+        // by the rag_chunks trigger, so no Ollama connection or embeddings are
+        // needed to index or search a local Markdown knowledge base.
+        if config.search_mode == "keyword" {
+            {
+                let db_guard = db.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+                rag_db::update_index_status(db_guard.connection(), file_id, "indexed")
+                    .map_err(|e| format!("Failed to update index status: {}", e))?;
+            }
+
+            let _ = app_handle.emit(
+                "rag_index_progress",
+                &IndexProgress {
+                    file_id: file_id.to_string(),
+                    file_name: file_name.to_string(),
+                    chunks_total: total_chunks,
+                    chunks_embedded: 0,
+                    status: "complete".to_string(),
+                },
+            );
+
+            log::info!(
+                "Indexed file '{}' ({} chunks, keyword-only FTS5)",
+                file_name,
+                total_chunks
+            );
+
+            return Ok(total_chunks);
+        }
+
         // Phase 3: Embed in batches (async, no DB lock held)
         let mut chunks_embedded: usize = 0;
         let mut batch_embeddings: Vec<(String, Vec<u8>)> = Vec::new();

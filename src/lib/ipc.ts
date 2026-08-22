@@ -18,6 +18,7 @@ import type {
   ModelInfo,
   OpenRouterModel,
   OllamaEmbeddingStatus,
+  ObsidianVaultImportResult,
   PartyAudioConfig,
   RagConfig,
   RagIndexStatus,
@@ -243,6 +244,13 @@ export async function loadContextFile(
   filePath: string
 ): Promise<ContextResource> {
   const result = await invoke<string>("load_context_file", { filePath });
+  return JSON.parse(result);
+}
+
+export async function importObsidianVault(
+  vaultPath: string
+): Promise<ObsidianVaultImportResult> {
+  const result = await invoke<string>("import_obsidian_vault", { vaultPath });
   return JSON.parse(result);
 }
 

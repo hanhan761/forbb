@@ -1,6 +1,11 @@
 import { create } from "zustand";
-import type { ContextResource, TokenBudget } from "../lib/types";
+import type {
+  ContextResource,
+  ObsidianVaultImportResult,
+  TokenBudget,
+} from "../lib/types";
 import {
+  importObsidianVault as ipcImportObsidianVault,
   loadContextFile as ipcLoadContextFile,
   removeContextFile as ipcRemoveContextFile,
   listContextResources as ipcListContextResources,
@@ -27,6 +32,7 @@ interface ContextState {
   // Async actions that call IPC
   loadResources: () => Promise<void>;
   loadFile: (filePath: string) => Promise<ContextResource>;
+  importVault: (vaultPath: string) => Promise<ObsidianVaultImportResult>;
   removeFile: (resourceId: string) => Promise<void>;
   saveCustomInstructions: (instructions: string) => Promise<void>;
   refreshTokenBudget: () => Promise<void>;
@@ -78,6 +84,23 @@ export const useContextStore = create<ContextState>((set, get) => ({
       // Refresh token budget after adding a file
       await get().refreshTokenBudget();
       return resource;
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      set({ isLoading: false, error: errorMsg });
+      throw new Error(errorMsg);
+    }
+  },
+
+  importVault: async (vaultPath: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      const result = await ipcImportObsidianVault(vaultPath);
+      set((state) => ({
+        resources: [...state.resources, ...result.imported],
+        isLoading: false,
+      }));
+      await get().refreshTokenBudget();
+      return result;
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       set({ isLoading: false, error: errorMsg });

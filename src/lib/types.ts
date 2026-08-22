@@ -418,6 +418,12 @@ export interface ContextResource {
   last_indexed_at?: string;
 }
 
+export interface ObsidianVaultImportResult {
+  vault_path: string;
+  imported: ContextResource[];
+  skipped: Array<{ path: string; reason: string }>;
+}
+
 export type ContextFileType = "pdf" | "txt" | "md" | "docx";
 
 export interface TokenBudget {

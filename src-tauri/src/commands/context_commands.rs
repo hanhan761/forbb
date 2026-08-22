@@ -1,6 +1,144 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::Serialize;
 use tauri::{command, State};
 
+use crate::context::ContextResource;
 use crate::state::AppState;
+
+#[derive(Debug, Clone, Serialize)]
+struct ObsidianSkippedFile {
+    path: String,
+    reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ObsidianVaultImportResult {
+    vault_path: String,
+    imported: Vec<ContextResource>,
+    skipped: Vec<ObsidianSkippedFile>,
+}
+
+/// Collect Markdown notes from an Obsidian Vault without traversing hidden
+/// configuration directories such as `.obsidian` or `.trash`.
+fn collect_markdown_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    collect_markdown_files_recursive(root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_markdown_files_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read Obsidian Vault '{}': {}", dir.display(), e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to inspect Vault entry: {}", e))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("Failed to inspect '{}': {}", path.display(), e))?;
+
+        if file_type.is_dir() {
+            let is_hidden = entry.file_name().to_string_lossy().starts_with('.');
+            if !is_hidden {
+                collect_markdown_files_recursive(&path, files)?;
+            }
+        } else if file_type.is_file()
+            && path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+        {
+            files.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+#[command]
+pub async fn import_obsidian_vault(
+    vault_path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let vault = PathBuf::from(&vault_path);
+    if !vault.is_dir() {
+        return Err(format!("Obsidian Vault folder not found: {}", vault_path));
+    }
+
+    let files = collect_markdown_files(&vault)?;
+    if files.is_empty() {
+        return Err("No Markdown notes found in the selected Obsidian Vault".to_string());
+    }
+
+    let ctx_mgr = state
+        .context
+        .as_ref()
+        .ok_or_else(|| "Context manager not initialized".to_string())?;
+
+    let mut imported = Vec::new();
+    let mut skipped = Vec::new();
+    {
+        let mut ctx = ctx_mgr
+            .lock()
+            .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+
+        for path in files {
+            let path_string = path.to_string_lossy().into_owned();
+            match ctx.load_file(&path_string) {
+                Ok(resource) => imported.push(resource),
+                Err(reason) => skipped.push(ObsidianSkippedFile {
+                    path: path_string,
+                    reason,
+                }),
+            }
+        }
+    }
+
+    // Persist the imported copies using the same database shape as single-file
+    // imports, so they survive restart and remain searchable by the existing RAG.
+    if let Some(db_arc) = state.database.as_ref() {
+        if let Ok(db_guard) = db_arc.lock() {
+            for resource in &imported {
+                let db_resource = crate::db::context::ContextResource {
+                    id: resource.id.clone(),
+                    name: resource.name.clone(),
+                    file_type: resource.file_type.clone(),
+                    file_path: resource.file_path.clone(),
+                    size_bytes: resource.size_bytes as i64,
+                    token_count: resource.token_count as i64,
+                    preview: resource.preview.clone(),
+                    loaded_at: resource.loaded_at.clone(),
+                };
+                if let Err(e) =
+                    crate::db::context::add_context_resource(db_guard.connection(), &db_resource)
+                {
+                    log::warn!(
+                        "Failed to persist imported Obsidian note '{}': {}",
+                        resource.name,
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    log::info!(
+        "Imported {} Markdown note(s) from Obsidian Vault '{}' ({} skipped)",
+        imported.len(),
+        vault_path,
+        skipped.len()
+    );
+
+    serde_json::to_string(&ObsidianVaultImportResult {
+        vault_path,
+        imported,
+        skipped,
+    })
+    .map_err(|e| format!("Failed to serialize Obsidian import result: {}", e))
+}
 
 #[command]
 pub async fn load_context_file(
@@ -146,4 +284,30 @@ pub async fn get_token_budget(
 
     serde_json::to_string(&budget)
         .map_err(|e| format!("Failed to serialize token budget: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_markdown_files;
+    use std::fs;
+
+    #[test]
+    fn collect_markdown_files_skips_hidden_obsidian_directories() {
+        let root =
+            std::env::temp_dir().join(format!("nexq-obsidian-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("interview")).unwrap();
+        fs::create_dir_all(root.join(".obsidian")).unwrap();
+        fs::write(root.join("README.md"), "read me").unwrap();
+        fs::write(root.join("interview/questions.md"), "questions").unwrap();
+        fs::write(root.join(".obsidian/app.json"), "{}").unwrap();
+        fs::write(root.join("notes.txt"), "not a note for this importer").unwrap();
+
+        let files = collect_markdown_files(&root).unwrap();
+
+        assert_eq!(files.len(), 2);
+        assert!(files
+            .iter()
+            .all(|path| !path.to_string_lossy().contains(".obsidian")));
+        let _ = fs::remove_dir_all(root);
+    }
 }
