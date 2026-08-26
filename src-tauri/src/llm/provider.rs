@@ -15,6 +15,12 @@ pub struct GenerationParams {
     /// Gemini: adds the `google_search` tool. OpenRouter: appends `:online` to the model id.
     /// Ignored by providers without a native web search mechanism.
     pub enable_web_search: bool,
+    /// Stable query key used by providers that cache complete web-grounded
+    /// answers. It intentionally excludes the full transcript prompt.
+    pub web_cache_key: Option<String>,
+    /// Reasoning effort requested for providers that support it (Codex uses
+    /// the app-server `turn/start.effort` field).
+    pub reasoning_effort: Option<String>,
 }
 
 impl Default for GenerationParams {
@@ -24,6 +30,8 @@ impl Default for GenerationParams {
             max_tokens: None,
             cache_name: None,
             enable_web_search: false,
+            web_cache_key: None,
+            reasoning_effort: None,
         }
     }
 }

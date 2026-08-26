@@ -12,7 +12,7 @@ import {
   hasApiKey,
   listOpenRouterModels,
 } from "../lib/ipc";
-import type { LLMProviderType, ModelInfo, OpenRouterModel } from "../lib/types";
+import type { CodexReasoningLevel, LLMProviderType, ModelInfo, OpenRouterModel } from "../lib/types";
 import { OpenRouterModelCatalog } from "./openrouter/OpenRouterModelCatalog";
 import {
   CheckCircle,
@@ -119,8 +119,10 @@ const DOT_STYLES: Record<BadgeVariant, string> = {
 export function LLMSettings() {
   const llmProvider = useConfigStore((s) => s.llmProvider);
   const llmModel = useConfigStore((s) => s.llmModel);
+  const llmReasoningLevel = useConfigStore((s) => s.llmReasoningLevel);
   const setConfigProvider = useConfigStore((s) => s.setLLMProvider);
   const setConfigModel = useConfigStore((s) => s.setLLMModel);
+  const setConfigReasoningLevel = useConfigStore((s) => s.setLLMReasoningLevel);
   const verifiedCloudProviders = useConfigStore((s) => s.verifiedCloudProviders);
   const setVerifiedCloudProviders = useConfigStore((s) => s.setVerifiedCloudProviders);
 
@@ -511,6 +513,31 @@ export function LLMSettings() {
           </div>
         )}
       </div>
+
+      {/* Codex reasoning */}
+      {selectedProvider === "codex" && (
+        <div className="rounded-xl border border-border/30 bg-card/50 p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-primary/80">Reasoning level</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sent to Codex app-server for each turn. Medium is the balanced default for live interviews.
+              </p>
+            </div>
+            <select
+              value={llmReasoningLevel}
+              onChange={(event) => setConfigReasoningLevel(event.target.value as CodexReasoningLevel)}
+              className="rounded-lg border border-border/50 bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 cursor-pointer"
+              aria-label="Codex reasoning level"
+            >
+              <option value="low">Low · fastest</option>
+              <option value="medium">Medium · balanced</option>
+              <option value="high">High · deeper</option>
+              <option value="xhigh">Extra high · slowest</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Make Active button — only when different from active AND provider is ready */}
       {selectedProvider !== llmProvider && (

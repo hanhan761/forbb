@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use std::env;
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::Mutex as StdMutex;
 use std::time::Instant;
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -20,6 +21,7 @@ use super::provider::{
     CompletionStats, GenerationParams, LLMError, LLMMessage, LLMProvider, ModelInfo,
     StreamEndPayload, StreamSourcesPayload, StreamTokenPayload, StreamSource,
 };
+use super::web_cache::WebAnswerCache;
 
 const DEFAULT_MODEL_ID: &str = "codex-default";
 const CODEX_BINARY_ENV: &str = "NEXQ_CODEX_BIN";
@@ -221,7 +223,11 @@ impl CodexSession {
         Ok(())
     }
 
-    async fn ensure_thread(&mut self, base_instructions: &str) -> Result<String, LLMError> {
+    async fn ensure_thread(
+        &mut self,
+        base_instructions: &str,
+        model: Option<&str>,
+    ) -> Result<String, LLMError> {
         self.ensure_initialized().await?;
         if let Some(thread_id) = self.thread_id.clone() {
             return Ok(thread_id);
@@ -239,6 +245,7 @@ impl CodexSession {
                     "sandbox": "read-only",
                     "ephemeral": false,
                     "threadSource": "nexq",
+                    "model": model.map(Value::from).unwrap_or(Value::Null),
                     "baseInstructions": if base_instructions.is_empty() { Value::Null } else { json!(base_instructions) }
                 }),
             )
@@ -257,16 +264,30 @@ impl CodexSession {
         Ok(thread_id)
     }
 
-    async fn start_turn(&mut self, thread_id: &str, prompt: &str) -> Result<u64, LLMError> {
+    async fn start_turn(
+        &mut self,
+        thread_id: &str,
+        prompt: &str,
+        model: Option<&str>,
+        reasoning_effort: Option<&str>,
+    ) -> Result<u64, LLMError> {
         let id = self.allocate_id();
+        let mut params = json!({
+            "threadId": thread_id,
+            "input": [{ "type": "text", "text": prompt }]
+        });
+        if let Some(model) = model {
+            params["model"] = json!(model);
+        }
+        if let Some(effort) = reasoning_effort {
+            params["effort"] = json!(effort);
+        }
+
         self.write_message(&json!({
             "jsonrpc": "2.0",
             "id": id,
             "method": "turn/start",
-            "params": {
-                "threadId": thread_id,
-                "input": [{ "type": "text", "text": prompt }]
-            }
+            "params": params
         }))
         .await?;
         Ok(id)
@@ -379,12 +400,14 @@ fn build_app_server_command() -> Command {
 /// A local authenticated Codex app-server client.
 pub struct CodexClient {
     session: TokioMutex<Option<CodexSession>>,
+    web_cache: StdMutex<WebAnswerCache>,
 }
 
 impl CodexClient {
     pub fn new() -> Self {
         Self {
             session: TokioMutex::new(None),
+            web_cache: StdMutex::new(WebAnswerCache::default()),
         }
     }
 
@@ -414,11 +437,45 @@ impl LLMProvider for CodexClient {
     async fn list_models(&self) -> Result<Vec<ModelInfo>, LLMError> {
         let mut session = self.session.lock().await;
         let current = Self::ensure_session(&mut session).await?;
-        current.ensure_thread("").await?;
+        current.ensure_initialized().await?;
 
+        let response = current
+            .request("model/list", json!({ "includeHidden": false, "limit": 100 }))
+            .await;
+
+        let models = response.ok().and_then(|value| {
+            value.get("data")?.as_array().map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| {
+                        let id = item
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .or_else(|| item.get("model").and_then(Value::as_str))?;
+                        Some(ModelInfo {
+                            id: id.to_string(),
+                            name: item
+                                .get("displayName")
+                                .and_then(Value::as_str)
+                                .unwrap_or(id)
+                                .to_string(),
+                            provider: "codex".to_string(),
+                            context_window: None,
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+        });
+
+        if let Some(models) = models.filter(|models| !models.is_empty()) {
+            return Ok(models);
+        }
+
+        // Older Codex app-server builds may not expose model/list yet. Keep a
+        // usable default rather than making the settings screen unusable.
         Ok(vec![ModelInfo {
             id: DEFAULT_MODEL_ID.to_string(),
-            name: "Codex local app-server".to_string(),
+            name: "Codex local app-server default".to_string(),
             provider: "codex".to_string(),
             context_window: None,
         }])
@@ -427,7 +484,7 @@ impl LLMProvider for CodexClient {
     async fn test_connection(&self) -> Result<bool, LLMError> {
         let mut session = self.session.lock().await;
         let current = Self::ensure_session(&mut session).await?;
-        current.ensure_thread("").await.map(|_| true)
+        current.ensure_thread("", None).await.map(|_| true)
     }
 
     async fn reset_session(&self) -> Result<(), LLMError> {
@@ -441,7 +498,7 @@ impl LLMProvider for CodexClient {
     async fn stream_completion(
         &self,
         messages: Vec<LLMMessage>,
-        _model: &str,
+        model: &str,
         params: GenerationParams,
         app_handle: tauri::AppHandle,
     ) -> Result<CompletionStats, LLMError> {
@@ -464,16 +521,81 @@ impl LLMProvider for CodexClient {
             if params.enable_web_search { "enabled when needed" } else { "disabled" },
         );
 
+        let requested_model = normalized_model(model);
+        let requested_effort = params
+            .reasoning_effort
+            .as_deref()
+            .map(str::trim)
+            .filter(|effort| !effort.is_empty());
+        let cache_key = params.web_cache_key.as_deref().map(|key| {
+            format!(
+                "model={};effort={};query={}",
+                requested_model.unwrap_or("default"),
+                requested_effort.unwrap_or("default"),
+                key
+            )
+        });
+
+        if params.enable_web_search {
+            if let Some(key) = cache_key.as_deref() {
+                let cached = self
+                    .web_cache
+                    .lock()
+                    .ok()
+                    .and_then(|mut cache| cache.get(key));
+                if let Some((answer, sources)) = cached {
+                    log::info!("Codex web cache hit for query key");
+                    let chunks = answer.chars().collect::<Vec<_>>();
+                    let chunk_count = chunks.chunks(64).count() as u64;
+                    for chunk in chunks.chunks(64) {
+                        let token = chunk.iter().collect::<String>();
+                        if !token.is_empty() {
+                            let _ = app_handle.emit(
+                                "llm_stream_token",
+                                StreamTokenPayload { token },
+                            );
+                        }
+                    }
+                    if !sources.is_empty() {
+                        let _ = app_handle.emit(
+                            "llm_stream_sources",
+                            StreamSourcesPayload { sources },
+                        );
+                    }
+                    let _ = app_handle.emit(
+                        "llm_stream_end",
+                        StreamEndPayload {
+                            total_tokens: chunk_count,
+                            latency_ms: 0,
+                        },
+                    );
+                    return Ok(CompletionStats {
+                        prompt_tokens: 0,
+                        completion_tokens: chunk_count,
+                        total_tokens: chunk_count,
+                        latency_ms: 0,
+                    });
+                }
+            }
+        }
+
         let mut session = self.session.lock().await;
         let current = Self::ensure_session(&mut session).await?;
-        let thread_id = current.ensure_thread(system_prompt).await?;
-        let request_id = current.start_turn(&thread_id, &prompt).await?;
+        let thread_id = current.ensure_thread(system_prompt, requested_model).await?;
+        let request_id = current
+            .start_turn(&thread_id, &prompt, requested_model, requested_effort)
+            .await?;
         let (token_count, latency_ms, response_text) = current
             .stream_turn(request_id, &thread_id, &app_handle)
             .await?;
 
         if params.enable_web_search {
             let sources = extract_sources(&response_text);
+            if let Some(key) = cache_key.as_deref() {
+                if let Ok(mut cache) = self.web_cache.lock() {
+                    cache.insert(key, response_text.clone(), sources.clone());
+                }
+            }
             if !sources.is_empty() {
                 let _ = app_handle.emit("llm_stream_sources", StreamSourcesPayload { sources });
             }
@@ -493,6 +615,15 @@ impl LLMProvider for CodexClient {
             total_tokens: token_count,
             latency_ms,
         })
+    }
+}
+
+fn normalized_model(model: &str) -> Option<&str> {
+    let model = model.trim();
+    if model.is_empty() || model == DEFAULT_MODEL_ID {
+        None
+    } else {
+        Some(model)
     }
 }
 

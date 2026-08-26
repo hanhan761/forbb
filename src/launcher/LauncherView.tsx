@@ -96,6 +96,7 @@ export function LauncherView() {
     audioMode: AudioMode;
     scenario: AIScenario;
     professorProfile: string;
+    profileId?: string;
   } | null>(null);
 
   const contextStrategy = useConfigStore((s) => s.contextStrategy);
@@ -137,12 +138,13 @@ export function LauncherView() {
     audioMode: AudioMode,
     scenario: AIScenario,
     professorProfile: string,
+    profileId?: string,
   ) => {
     setShowMeetingSetup(false);
     setIsStarting(true);
     setStartError(null);
     try {
-      await startMeetingFlow(undefined, audioMode, scenario, professorProfile);
+      await startMeetingFlow(undefined, audioMode, scenario, professorProfile, profileId);
       showToast("Meeting started", "success");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to start meeting";
@@ -160,7 +162,13 @@ export function LauncherView() {
     pendingMeetingSetup.current = null;
     try {
       await endMeetingFlow();
-      await startMeetingFlow(undefined, setup?.audioMode, setup?.scenario, setup?.professorProfile);
+      await startMeetingFlow(
+        undefined,
+        setup?.audioMode,
+        setup?.scenario,
+        setup?.professorProfile,
+        setup?.profileId,
+      );
       showToast("New meeting started", "success");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to start";

@@ -49,6 +49,7 @@ const DEFAULT_PROMPTS: Record<IntelligenceMode, string> = {
     "- Open Questions\n" +
     "- Interview Review: questions and Personal/Research/Project/Course/Algorithm/Math/Professor/Follow-up/Unknown classification\n" +
     "- Weak answers and missing knowledge\n" +
+    "- Mistake Bank: classify each weak point as Technical, Research, or English; include the question, what was weak, the corrected knowledge or phrasing, and one next drill. If none, say none found.\n" +
     "- Professor focus and next preparation suggestions\n" +
     "Be factual, concise, and base everything strictly on the transcript.",
   ActionItemsExtraction:

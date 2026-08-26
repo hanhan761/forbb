@@ -5,7 +5,7 @@
 import type { Meeting, TranscriptSegment, AIScenario, SpeakerIdentity } from "./types";
 import { formatTimestamp, formatDurationLong, getSpeakerLabel, getModeLabel } from "./utils";
 import { showToast } from "../stores/toastStore";
-import { writeObsidianReview } from "./ipc";
+import { appendObsidianMistakeBank, writeObsidianReview } from "./ipc";
 
 /** Strip LLM thinking tags from text (Qwen3, DeepSeek, etc.) */
 function stripThinkTags(text: string): string {
@@ -408,6 +408,64 @@ export async function exportMeetingToObsidian(meeting: Meeting): Promise<boolean
   } catch (err) {
     console.error("[Export] Failed to write Obsidian review:", err);
     showToast("Obsidian write-back failed", "error");
+    return false;
+  }
+}
+
+function extractMistakeBank(summary: string): string | null {
+  const lines = stripThinkTags(summary).split(/\r?\n/);
+  const start = lines.findIndex((line) => /^\s*#{2,6}\s+Mistake Bank\s*$/i.test(line));
+  if (start < 0) return null;
+
+  const heading = lines[start].match(/^\s*(#+)/);
+  const level = heading?.[1].length ?? 2;
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const nextHeading = lines[index].match(/^\s*(#+)\s+/);
+    if (nextHeading && nextHeading[1].length <= level) {
+      end = index;
+      break;
+    }
+  }
+
+  return lines.slice(start + 1, end).join("\n").trim() || "None found.";
+}
+
+/** Append only the classified weak points to a durable Obsidian note. */
+export async function exportMeetingMistakeBank(meeting: Meeting): Promise<boolean> {
+  const summary = meeting.summary ? extractMistakeBank(meeting.summary) : null;
+  if (!summary) {
+    showToast("No Mistake Bank section found — regenerate the summary first", "error");
+    return false;
+  }
+
+  try {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose an Obsidian Vault or output folder",
+    });
+    if (!selected || Array.isArray(selected)) return false;
+
+    const { useConfigStore } = await import("../stores/configStore");
+    const professorProfile =
+      meeting.config_snapshot?.professor_profile?.trim() ||
+      useConfigStore.getState().rememberedMeetingSetup?.professorProfile?.trim() ||
+      "";
+    const meetingDate = new Date(meeting.start_time).toISOString().slice(0, 10);
+    const path = await appendObsidianMistakeBank({
+      directory: selected,
+      title: meeting.title,
+      meetingDate,
+      professorProfile,
+      content: summary,
+    });
+    showToast(`Appended Obsidian mistake bank: ${path}`, "success");
+    return true;
+  } catch (err) {
+    console.error("[Export] Failed to append Obsidian mistake bank:", err);
+    showToast("Obsidian mistake-bank write-back failed", "error");
     return false;
   }
 }

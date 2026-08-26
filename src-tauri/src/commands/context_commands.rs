@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -203,6 +204,57 @@ pub async fn write_obsidian_review(
     }
     fs::write(&output_path, content)
         .map_err(|error| format!("Failed to write Obsidian review: {}", error))?;
+
+    Ok(serde_json::to_string(&ObsidianReviewWriteResult {
+        path: output_path.to_string_lossy().into_owned(),
+    })
+    .unwrap_or_else(|_| output_path.to_string_lossy().into_owned()))
+}
+
+/// Append the structured Mistake Bank section from one review into a durable
+/// per-profile Obsidian note. Existing entries are never overwritten.
+#[command]
+pub async fn append_obsidian_mistake_bank(
+    directory: String,
+    title: String,
+    meeting_date: String,
+    professor_profile: Option<String>,
+    content: String,
+) -> Result<String, String> {
+    let base = PathBuf::from(&directory);
+    if !base.is_dir() {
+        return Err(format!("Obsidian output folder not found: {}", directory));
+    }
+    if content.trim().is_empty() {
+        return Err("Mistake Bank content is empty".to_string());
+    }
+
+    let profile = profile_folder_name(professor_profile.as_deref());
+    let output_dir = base.join("Interview Assistant").join(&profile);
+    fs::create_dir_all(&output_dir)
+        .map_err(|error| format!("Failed to create Obsidian mistake-bank folder: {}", error))?;
+
+    let output_path = output_dir.join("Mistake Bank.md");
+    let is_new = !output_path.exists();
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&output_path)
+        .map_err(|error| format!("Failed to open Obsidian mistake bank: {}", error))?;
+
+    if is_new {
+        writeln!(file, "# Interview Mistake Bank")
+            .map_err(|error| format!("Failed to write Obsidian mistake bank: {}", error))?;
+        writeln!(file, "\nProfile: {}", profile)
+            .map_err(|error| format!("Failed to write Obsidian mistake bank: {}", error))?;
+    }
+
+    let date = safe_path_component(&meeting_date, "undated");
+    let entry_title = safe_path_component(&title, "Interview");
+    writeln!(file, "\n## {} — {}\n", date, entry_title)
+        .map_err(|error| format!("Failed to write Obsidian mistake bank: {}", error))?;
+    writeln!(file, "{}", content.trim())
+        .map_err(|error| format!("Failed to write Obsidian mistake bank: {}", error))?;
 
     Ok(serde_json::to_string(&ObsidianReviewWriteResult {
         path: output_path.to_string_lossy().into_owned(),

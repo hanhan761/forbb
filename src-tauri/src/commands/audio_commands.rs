@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use tauri::{command, AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
@@ -9,7 +10,7 @@ use crate::audio::session_monitor;
 use crate::audio::vad::{calculate_peak, calculate_rms, VoiceActivityDetector};
 use crate::audio::{AudioCaptureManager, AudioLevel, AudioSource};
 use crate::stt::provider::STTProvider;
-use crate::state::AppState;
+use crate::state::{ActiveAudioCapture, AppState};
 
 /// List all available audio input and output devices.
 #[command]
@@ -316,6 +317,14 @@ pub async fn start_capture(
 #[command]
 pub async fn stop_capture(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
+
+    // Invalidate the recovery watcher before releasing streams so it cannot
+    // restart a meeting that the user is deliberately ending.
+    if let Ok(mut active) = state.active_audio_capture.lock() {
+        *active = None;
+    }
+    state.audio_recovery_running.store(false, Ordering::SeqCst);
+    state.audio_recovery_generation.fetch_add(1, Ordering::SeqCst);
 
     // Restore original default capture device if IPolicyConfig override was active
     restore_default_device_if_overridden(&state, &app);
@@ -762,6 +771,136 @@ pub async fn stop_device_monitor(app: tauri::AppHandle) -> Result<(), String> {
         state.device_monitor_running.store(false, Ordering::SeqCst);
     }
     Ok(())
+}
+
+fn missing_party_device(
+    config: &crate::audio::PartyAudioConfig,
+    party: &str,
+) -> Option<String> {
+    let device_id = config.device_id.trim();
+    let result = if config.is_input_device {
+        device_manager::find_input_device(device_id).map(|_| ())
+    } else {
+        device_manager::find_output_device(device_id).map(|_| ())
+    };
+
+    result.err().map(|error| format!("{} device unavailable: {}", party, error))
+}
+
+fn emit_audio_capture_status(app: &AppHandle, status: &str, reason: Option<&str>) {
+    let mut payload = serde_json::json!({ "status": status });
+    if let Some(reason) = reason {
+        payload["reason"] = serde_json::Value::String(reason.to_string());
+    }
+    let _ = app.emit("audio_capture_status", payload);
+}
+
+/// Watch the selected endpoints and cpal terminal-error flag while a meeting
+/// is live. A device may disappear without closing the application (USB,
+/// Bluetooth and virtual cables are common examples), so the current capture
+/// pipeline is rebuilt from the same serialized settings once the endpoint is
+/// available again.
+async fn run_audio_recovery_loop(app: AppHandle, generation: u64) {
+    let mut issue_since: Option<Instant> = None;
+    let mut last_recovery: Option<Instant> = None;
+
+    loop {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let state = app.state::<AppState>();
+        if !state.audio_recovery_running.load(Ordering::SeqCst)
+            || state.audio_recovery_generation.load(Ordering::SeqCst) != generation
+        {
+            break;
+        }
+
+        let active = match state.active_audio_capture.lock() {
+            Ok(guard) => guard.clone(),
+            Err(_) => break,
+        };
+        let Some(active) = active else { break };
+
+        let capture_state = match state.audio.lock() {
+            Ok(guard) => guard
+                .as_ref()
+                .map(|manager| (manager.is_capturing(), manager.capture_error_flag())),
+            Err(_) => None,
+        };
+        let Some((is_capturing, error_flag)) = capture_state else { continue };
+        if !is_capturing {
+            continue;
+        }
+
+        let you: crate::audio::PartyAudioConfig = match serde_json::from_str(&active.you_config) {
+            Ok(config) => config,
+            Err(error) => {
+                log::warn!("Audio recovery skipped invalid You config: {}", error);
+                continue;
+            }
+        };
+        let them: crate::audio::PartyAudioConfig = match serde_json::from_str(&active.them_config) {
+            Ok(config) => config,
+            Err(error) => {
+                log::warn!("Audio recovery skipped invalid Them config: {}", error);
+                continue;
+            }
+        };
+
+        let missing_device = missing_party_device(&you, "You")
+            .or_else(|| missing_party_device(&them, "Them"));
+        let stream_error = error_flag.load(Ordering::SeqCst);
+        let reason = missing_device.or_else(|| {
+            stream_error.then(|| "Audio stream reported a terminal error".to_string())
+        });
+
+        if let Some(reason) = reason {
+            if issue_since.is_none() {
+                issue_since = Some(Instant::now());
+                emit_audio_capture_status(&app, "degraded", Some(&reason));
+            }
+
+            // Debounce transient endpoint changes and avoid a tight restart
+            // loop while a disconnected device is still unavailable.
+            if issue_since
+                .map(|started| started.elapsed() < Duration::from_secs(1))
+                .unwrap_or(true)
+                || last_recovery
+                    .map(|started| started.elapsed() < Duration::from_secs(5))
+                    .unwrap_or(false)
+            {
+                continue;
+            }
+
+            let still_current = state
+                .active_audio_capture
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone())
+                .map(|current| {
+                    current.you_config == active.you_config
+                        && current.them_config == active.them_config
+                })
+                .unwrap_or(false);
+            if !still_current {
+                continue;
+            }
+
+            last_recovery = Some(Instant::now());
+            emit_audio_capture_status(&app, "recovering", Some(&reason));
+            // The actual restart is requested through the frontend so it can
+            // reuse the same Tauri runtime that owns the active stream tasks.
+            // This watcher remains lightweight and will request another retry
+            // after the backoff if the endpoint is still unavailable.
+        } else {
+            issue_since = None;
+            last_recovery = None;
+        }
+    }
+
+    let state = app.state::<AppState>();
+    if state.audio_recovery_generation.load(Ordering::SeqCst) == generation {
+        state.audio_recovery_running.store(false, Ordering::SeqCst);
+    }
 }
 
 /// Enumerate active audio sessions (per-app audio awareness).
@@ -1465,6 +1604,28 @@ pub async fn start_capture_per_party(
         }
 
         log::info!("Per-party audio processing task exiting");
+    });
+
+    // Keep the exact settings used by this pipeline so a disconnected USB,
+    // Bluetooth, or virtual audio endpoint can be reopened automatically.
+    {
+        let mut active = state
+            .active_audio_capture
+            .lock()
+            .map_err(|_| "Active audio capture lock poisoned".to_string())?;
+        *active = Some(ActiveAudioCapture {
+            you_config: you_config.clone(),
+            them_config: them_config.clone(),
+        });
+    }
+    let generation = state
+        .audio_recovery_generation
+        .fetch_add(1, Ordering::SeqCst)
+        + 1;
+    state.audio_recovery_running.store(true, Ordering::SeqCst);
+    let recovery_app = app.clone();
+    tokio::spawn(async move {
+        run_audio_recovery_loop(recovery_app, generation).await;
     });
 
     log::info!("Per-party audio capture started");

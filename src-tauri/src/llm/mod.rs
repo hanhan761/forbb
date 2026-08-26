@@ -8,6 +8,7 @@ pub mod openai_compat;
 pub mod openrouter_models;
 pub mod provider;
 pub mod stream_parser;
+pub mod web_cache;
 
 use provider::{LLMError, LLMProvider};
 use serde::{Deserialize, Serialize};

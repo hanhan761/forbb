@@ -585,6 +585,7 @@ pub async fn update_meeting_mode(
 pub async fn update_meeting_profile(
     meeting_id: String,
     professor_profile: String,
+    interview_profile_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let db = state
@@ -609,6 +610,17 @@ pub async fn update_meeting_profile(
                 "professor_profile".to_string(),
                 serde_json::Value::String(professor_profile),
             );
+        }
+        match interview_profile_id.as_deref().map(str::trim) {
+            Some(id) if !id.is_empty() => {
+                object.insert(
+                    "interview_profile_id".to_string(),
+                    serde_json::Value::String(id.to_string()),
+                );
+            }
+            _ => {
+                object.remove("interview_profile_id");
+            }
         }
     }
 

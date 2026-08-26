@@ -56,6 +56,7 @@ export function MeetingDetails({ meetingId, onBack }: MeetingDetailsProps) {
   const currentTargetLang = useTranslationStore((s) => s.targetLang);
   const autoTranslateEnabled = useTranslationStore((s) => s.autoTranslateEnabled);
   const showPostMeetingTranslation = useConfigStore((s) => s.showPostMeetingTranslation);
+  const autoSummary = useConfigStore((s) => s.autoSummary);
 
   // Demo mode — build Meeting from Zustand stores instead of IPC
   const isDemoActive = useDemoStore((s) => s.isDemoActive);
@@ -244,6 +245,35 @@ export function MeetingDetails({ meetingId, onBack }: MeetingDetailsProps) {
     );
   });
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const autoSummaryStarted = useRef<string | null>(null);
+
+  // Generate the review once when a completed meeting is opened. This keeps
+  // the post-meeting flow automatic without adding any meeting-app controls.
+  useEffect(() => {
+    if (
+      !autoSummary ||
+      isDemoActive ||
+      isActiveMeeting ||
+      !meeting ||
+      meeting.summary ||
+      meeting.transcript.length === 0 ||
+      summaryGeneration.isGenerating ||
+      autoSummaryStarted.current === meeting.id
+    ) {
+      return;
+    }
+    autoSummaryStarted.current = meeting.id;
+    void summaryGeneration.generate();
+  }, [
+    autoSummary,
+    isDemoActive,
+    isActiveMeeting,
+    meeting?.id,
+    meeting?.summary,
+    meeting?.transcript.length,
+    summaryGeneration.isGenerating,
+    summaryGeneration.generate,
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {

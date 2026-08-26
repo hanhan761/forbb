@@ -88,6 +88,8 @@ pub struct AudioCaptureManager {
     pub test_stop_flag: Arc<AtomicBool>,
     /// Whether any non-silent audio was detected during test
     pub test_audio_detected: Arc<AtomicBool>,
+    /// Set by cpal terminal stream callbacks; consumed by the recovery loop.
+    capture_error: Arc<AtomicBool>,
 }
 
 impl AudioCaptureManager {
@@ -111,6 +113,7 @@ impl AudioCaptureManager {
             test_system_thread: None,
             test_stop_flag: Arc::new(AtomicBool::new(false)),
             test_audio_detected: Arc::new(AtomicBool::new(false)),
+            capture_error: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -137,6 +140,7 @@ impl AudioCaptureManager {
 
         // Reset stop flag
         self.stop_flag.store(false, Ordering::SeqCst);
+        self.capture_error.store(false, Ordering::SeqCst);
 
         // Same-device optimization: when both parties use the same input device,
         // open ONE capture and duplicate chunks with both Mic + System tags.
@@ -153,7 +157,11 @@ impl AudioCaptureManager {
             );
             // Single capture that produces both Mic and System chunks
             let dual_tx = tx.clone();
-            match mic_capture::start_mic_capture_dual(mic_device_id, dual_tx) {
+            match mic_capture::start_mic_capture_dual_with_error(
+                mic_device_id,
+                dual_tx,
+                Some(self.capture_error.clone()),
+            ) {
                 Ok(stream) => {
                     self.mic_stream = Some(stream);
                     log::info!("Dual-tagged capture started on shared device");
@@ -166,7 +174,12 @@ impl AudioCaptureManager {
         } else {
             // Standard: separate mic capture
             let mic_tx = tx.clone();
-            match mic_capture::start_mic_capture(mic_device_id, mic_tx, AudioSource::Mic) {
+            match mic_capture::start_mic_capture_with_error(
+                mic_device_id,
+                mic_tx,
+                AudioSource::Mic,
+                Some(self.capture_error.clone()),
+            ) {
                 Ok(stream) => {
                     self.mic_stream = Some(stream);
                     log::info!("Mic capture started");
@@ -184,12 +197,18 @@ impl AudioCaptureManager {
         } else if system_is_input && !system_device_id.is_empty() && system_device_id != "default" {
             // "Them" is a different input device — capture tagged as System
             let system_tx = tx.clone();
-            match mic_capture::start_mic_capture(system_device_id, system_tx, AudioSource::System) {
+            match mic_capture::start_mic_capture_with_error(
+                system_device_id,
+                system_tx,
+                AudioSource::System,
+                Some(self.capture_error.clone()),
+            ) {
                 Ok(stream) => {
                     self.system_input_stream = Some(stream);
                     log::info!("System audio capture started via input device (tagged as System)");
                 }
                 Err(e) => {
+                    self.capture_error.store(true, Ordering::SeqCst);
                     log::error!(
                         "Failed to start system input capture: {}. System audio will not be captured.",
                         e
@@ -205,12 +224,18 @@ impl AudioCaptureManager {
             } else {
                 Some(system_device_id.to_string())
             };
-            match system_capture::start_system_capture_device(system_tx, stop_flag, device_name) {
+            match system_capture::start_system_capture_device_with_error(
+                system_tx,
+                stop_flag,
+                device_name,
+                Some(self.capture_error.clone()),
+            ) {
                 Ok(handle) => {
                     self.system_thread = Some(handle);
                     log::info!("System audio capture started via WASAPI loopback");
                 }
                 Err(e) => {
+                    self.capture_error.store(true, Ordering::SeqCst);
                     log::error!(
                         "WASAPI loopback failed: {}. System audio (remote party) will not be captured.",
                         e
@@ -269,6 +294,11 @@ impl AudioCaptureManager {
     /// Check if capture is active.
     pub fn is_capturing(&self) -> bool {
         self.is_capturing
+    }
+
+    /// Return the shared terminal-error flag for the active capture streams.
+    pub fn capture_error_flag(&self) -> Arc<AtomicBool> {
+        self.capture_error.clone()
     }
 
     /// Enable or disable recording to file.

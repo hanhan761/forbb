@@ -29,6 +29,14 @@ pub struct PendingRecording {
     pub start_time_ms: u64,
 }
 
+/// Serialized per-party capture settings kept only while a meeting is live.
+/// The recovery loop reuses these settings after a device is reconnected.
+#[derive(Clone)]
+pub struct ActiveAudioCapture {
+    pub you_config: String,
+    pub them_config: String,
+}
+
 /// Active scenario prompts pushed from the frontend when a meeting starts.
 /// The intelligence pipeline reads these instead of hardcoded prompt_templates.
 pub struct ActiveScenario {
@@ -96,6 +104,12 @@ pub struct AppState {
     /// in sequence; by the time end_meeting runs the recorder is stopped and
     /// the WAV path + start time are waiting here.
     pub pending_recording: Arc<Mutex<Option<PendingRecording>>>,
+    /// Current per-party capture settings for device-loss recovery.
+    pub active_audio_capture: Arc<Mutex<Option<ActiveAudioCapture>>>,
+    /// Ensures only one capture recovery watcher exists at a time.
+    pub audio_recovery_running: Arc<AtomicBool>,
+    /// Generation token invalidating watchers from an ended or hot-swapped meeting.
+    pub audio_recovery_generation: Arc<AtomicU64>,
     /// In-memory cache for OpenRouter model catalog (TTL: 4 hours).
     pub openrouter_cache: Arc<Mutex<Option<OpenRouterModelCache>>>,
     /// Tray icon manager — initialized after the tray handle is available.
@@ -129,6 +143,9 @@ impl AppState {
             ipolicy_target_endpoint: Arc::new(Mutex::new(None)),
             active_scenario: Arc::new(RwLock::new(ActiveScenario::default())),
             pending_recording: Arc::new(Mutex::new(None)),
+            active_audio_capture: Arc::new(Mutex::new(None)),
+            audio_recovery_running: Arc::new(AtomicBool::new(false)),
+            audio_recovery_generation: Arc::new(AtomicU64::new(0)),
             openrouter_cache: Arc::new(Mutex::new(None)),
             tray_manager: Arc::new(Mutex::new(None)),
             gemini_cache: Arc::new(Mutex::new(None)),

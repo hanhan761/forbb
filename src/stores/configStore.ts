@@ -6,6 +6,7 @@ import type {
   STTProviderType,
   HotkeyConfig,
   MeetingAudioConfig,
+  InterviewProfile,
   ContextStrategy,
   WhisperDualPassConfig,
   DeepgramConfig,
@@ -86,6 +87,7 @@ interface ConfigState {
   sttLanguage: string;
   llmProvider: LLMProviderType;
   llmModel: string;
+  llmReasoningLevel: "low" | "medium" | "high" | "xhigh";
 
   // Audio (legacy — kept for backward compat, new code uses meetingAudioConfig)
   micDeviceId: string | null;
@@ -141,7 +143,9 @@ interface ConfigState {
     audioMode: AudioMode;
     scenario: AIScenario;
     professorProfile?: string;
+    profileId?: string;
   } | null;
+  interviewProfiles: InterviewProfile[];
   diarizationEnabled: boolean;
   noisePreset: string | null;
   confidenceThreshold: number;
@@ -192,6 +196,7 @@ interface ConfigState {
   setSTTLanguage: (language: string) => void;
   setLLMProvider: (provider: LLMProviderType) => void;
   setLLMModel: (model: string) => void;
+  setLLMReasoningLevel: (level: "low" | "medium" | "high" | "xhigh") => void;
   setMicDeviceId: (id: string | null) => void;
   setSystemDeviceId: (id: string | null) => void;
   setRecordingEnabled: (enabled: boolean) => void;
@@ -217,7 +222,10 @@ interface ConfigState {
     audioMode: AudioMode;
     scenario: AIScenario;
     professorProfile?: string;
+    profileId?: string;
   } | null) => void;
+  saveInterviewProfile: (profile: Omit<InterviewProfile, "id"> & { id?: string }) => string;
+  deleteInterviewProfile: (id: string) => void;
   setDiarizationEnabled: (enabled: boolean) => void;
   setNoisePreset: (preset: string | null) => void;
   setConfidenceThreshold: (threshold: number) => void;
@@ -252,6 +260,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   sttLanguage: "en-US",
   llmProvider: "codex",
   llmModel: "codex-default",
+  llmReasoningLevel: "medium",
   micDeviceId: null,
   systemDeviceId: null,
   recordingEnabled: false,
@@ -273,6 +282,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   contextStrategy: "stuffing",
   hotkeys: DEFAULT_HOTKEYS,
   rememberedMeetingSetup: null,
+  interviewProfiles: [],
   diarizationEnabled: true,
   noisePreset: null,
   confidenceThreshold: 0.7,
@@ -344,6 +354,10 @@ export const useConfigStore = create<ConfigState>((set) => ({
   setLLMModel: (model) => {
     set({ llmModel: model });
     persistValue("llmModel", model);
+  },
+  setLLMReasoningLevel: (level) => {
+    set({ llmReasoningLevel: level });
+    persistValue("llmReasoningLevel", level);
   },
   setMicDeviceId: (id) => {
     set({ micDeviceId: id });
@@ -530,6 +544,23 @@ export const useConfigStore = create<ConfigState>((set) => ({
     set({ rememberedMeetingSetup: setup });
     persistValue("rememberedMeetingSetup", setup);
   },
+  saveInterviewProfile: (profile) => {
+    const current = useConfigStore.getState().interviewProfiles;
+    const id = profile.id ?? crypto.randomUUID();
+    const nextProfile: InterviewProfile = { ...profile, id };
+    const updated = [
+      ...current.filter((item) => item.id !== id),
+      nextProfile,
+    ];
+    set({ interviewProfiles: updated });
+    persistValue("interviewProfiles", updated);
+    return id;
+  },
+  deleteInterviewProfile: (id) => {
+    const updated = useConfigStore.getState().interviewProfiles.filter((item) => item.id !== id);
+    set({ interviewProfiles: updated });
+    persistValue("interviewProfiles", updated);
+  },
   setDiarizationEnabled: (enabled) => {
     set({ diarizationEnabled: enabled });
     persistValue("diarizationEnabled", enabled);
@@ -656,6 +687,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
       const sttLanguage = await store.get<string>("sttLanguage");
       const llmProvider = await store.get<LLMProviderType>("llmProvider");
       const llmModel = await store.get<string>("llmModel");
+      const llmReasoningLevel = await store.get<"low" | "medium" | "high" | "xhigh">("llmReasoningLevel");
       const micDeviceId = await store.get<string | null>("micDeviceId");
       const systemDeviceId = await store.get<string | null>("systemDeviceId");
       const recordingEnabled = await store.get<boolean>("recordingEnabled");
@@ -680,7 +712,9 @@ export const useConfigStore = create<ConfigState>((set) => ({
         audioMode: AudioMode;
         scenario: AIScenario;
         professorProfile?: string;
+        profileId?: string;
       } | null>("rememberedMeetingSetup");
+      const interviewProfiles = await store.get<InterviewProfile[]>("interviewProfiles");
       const diarizationEnabled = await store.get<boolean>("diarizationEnabled");
       const noisePreset = await store.get<string | null>("noisePreset");
       const confidenceThreshold = await store.get<number>("confidenceThreshold");
@@ -800,6 +834,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         ...(sttLanguage != null && { sttLanguage }),
         ...(llmProvider != null && { llmProvider }),
         ...(llmModel != null && { llmModel }),
+        llmReasoningLevel: llmReasoningLevel ?? "medium",
         ...(micDeviceId !== undefined && { micDeviceId }),
         ...(systemDeviceId !== undefined && { systemDeviceId }),
         ...(recordingEnabled != null && { recordingEnabled }),
@@ -821,6 +856,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         ...(groqConfig != null && { groqConfig }),
         ...(pauseThresholdMs != null && { pauseThresholdMs }),
         ...(rememberedMeetingSetup !== undefined && { rememberedMeetingSetup: rememberedMeetingSetup ?? null }),
+        interviewProfiles: interviewProfiles ?? [],
         ...(diarizationEnabled != null && { diarizationEnabled }),
         ...(noisePreset !== undefined && { noisePreset: noisePreset ?? null }),
         ...(confidenceThreshold != null && { confidenceThreshold }),
@@ -893,6 +929,12 @@ export const useConfigStore = create<ConfigState>((set) => ({
       });
       store.onKeyChange<string>("llmModel", (val) => {
         if (val != null) set({ llmModel: val });
+      });
+      store.onKeyChange<"low" | "medium" | "high" | "xhigh">("llmReasoningLevel", (val) => {
+        if (val != null) set({ llmReasoningLevel: val });
+      });
+      store.onKeyChange<InterviewProfile[]>("interviewProfiles", (val) => {
+        if (val != null) set({ interviewProfiles: val });
       });
       store.onKeyChange<ContextStrategy>("contextStrategy", (val) => {
         if (val != null) set({ contextStrategy: val });

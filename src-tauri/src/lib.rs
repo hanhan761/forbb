@@ -559,6 +559,7 @@ pub fn run() {
             context_commands::load_context_file,
             context_commands::import_obsidian_vault,
             context_commands::write_obsidian_review,
+            context_commands::append_obsidian_mistake_bank,
             context_commands::remove_context_file,
             context_commands::list_context_resources,
             context_commands::set_custom_instructions,

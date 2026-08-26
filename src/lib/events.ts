@@ -5,6 +5,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AudioLevelEvent,
+  AudioCaptureStatusEvent,
   BatchTranslationProgress,
   ModelDownloadProgress,
   OllamaPullProgressEvent,
@@ -93,6 +94,14 @@ export function onAudioLevel(
   handler: (event: AudioLevelEvent) => void
 ): Promise<UnlistenFn> {
   return listen<AudioLevelEvent>("audio_level", (e) => handler(e.payload));
+}
+
+export function onAudioCaptureStatus(
+  handler: (event: AudioCaptureStatusEvent) => void
+): Promise<UnlistenFn> {
+  return listen<AudioCaptureStatusEvent>("audio_capture_status", (e) =>
+    handler(e.payload)
+  );
 }
 
 export function onAudioDeviceChange(

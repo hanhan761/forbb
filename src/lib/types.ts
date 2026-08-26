@@ -109,6 +109,17 @@ export interface MeetingConfig {
   llm_model: string;
   recording_enabled: boolean;
   professor_profile?: string;
+  interview_profile_id?: string;
+}
+
+/** A reusable local school / professor / lab context for interview setup. */
+export interface InterviewProfile {
+  id: string;
+  name: string;
+  school: string;
+  professor: string;
+  lab: string;
+  notes: string;
 }
 
 export interface MeetingSummary {
@@ -238,6 +249,7 @@ export type QuestionType =
   | "math"
   | "professor"
   | "latest"
+  | "unknown_term"
   | "follow_up"
   | "unknown";
 
@@ -475,6 +487,8 @@ export interface ContextResource {
   last_indexed_at?: string;
 }
 
+export type CodexReasoningLevel = "low" | "medium" | "high" | "xhigh";
+
 export interface ObsidianVaultImportResult {
   vault_path: string;
   imported: ContextResource[];
@@ -603,6 +617,11 @@ export interface AudioLevelEvent {
   source: AudioSource;
   level: number;
   peak: number;
+}
+
+export interface AudioCaptureStatusEvent {
+  status: "degraded" | "recovering" | "recovered" | "failed";
+  reason?: string;
 }
 
 // == AI CALL LOG TYPES ==

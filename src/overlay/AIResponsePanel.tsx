@@ -381,6 +381,7 @@ function AnswerMeta({
     latest: "Latest",
     follow_up: "Follow-up",
     unknown: "General",
+    unknown_term: "Unknown term",
   };
   const confidenceLabel: Record<string, string> = {
     high: "High",

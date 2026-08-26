@@ -115,6 +115,7 @@ pub async fn generate_assist(
     custom_question: Option<String>,
     route: Option<String>,
     answer_length: Option<String>,
+    reasoning_effort: Option<String>,
     glossary: Option<Vec<String>>,
     transcript_segments: Option<String>,
     app_handle: AppHandle,
@@ -327,7 +328,7 @@ pub async fn generate_assist(
     };
 
     let system_prompt = format!(
-        "{}\n\nAnswer length: {}. Keep the English answer natural and speakable; do not add unsupported personal details.{}",
+        "{}\n\nAnswer length: {}. Keep the English answer natural and speakable; do not add unsupported personal details.{}{}",
         system_prompt,
         match answer_length.as_str() {
             "short" => "Short (15–30 seconds)",
@@ -335,6 +336,11 @@ pub async fn generate_assist(
             _ => "Normal (30–60 seconds)",
         },
         glossary_instruction,
+        if mode == "MeetingSummary" {
+            "\n\nReview persistence requirement: include a ## Mistake Bank section. Classify each weak point as Technical, Research, or English and include the question, weak point, correction, and next drill; if none, write None found."
+        } else {
+            ""
+        },
     );
 
     // Build generation params from per-action overrides or global defaults
@@ -368,6 +374,16 @@ pub async fn generate_assist(
         max_tokens: None,
         cache_name: active_cache_name.clone(),
         enable_web_search,
+        web_cache_key: if enable_web_search {
+            Some(routing_text.clone())
+        } else {
+            None
+        },
+        reasoning_effort: reasoning_effort
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string()),
     };
 
     // RAG metadata for StreamStartEvent

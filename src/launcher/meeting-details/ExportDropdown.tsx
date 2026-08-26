@@ -5,6 +5,7 @@ import {
   exportMeetingAsSRT,
   exportMeetingAsJSON,
   exportMeetingToObsidian,
+  exportMeetingMistakeBank,
   exportMeetingScenario,
   getScenarioExportFormat,
 } from "../../lib/export";
@@ -83,6 +84,13 @@ export function ExportDropdown({ meeting }: ExportDropdownProps) {
       description: "Write review into a Vault folder",
       icon: <BookOpen className="h-3.5 w-3.5" />,
       action: () => exportMeetingToObsidian(meeting),
+      variant: "obsidian",
+    },
+    {
+      label: "Obsidian Mistake Bank",
+      description: "Append Technical / Research / English gaps",
+      icon: <BookOpen className="h-3.5 w-3.5" />,
+      action: () => exportMeetingMistakeBank(meeting),
       variant: "obsidian",
     },
   ];

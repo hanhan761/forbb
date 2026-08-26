@@ -232,13 +232,15 @@ export async function generateAssist(
   // keeps project names and technical terms stable across recognition and the
   // oral answer, even when the active LLM is not the STT provider.
   const { useConfigStore } = await import("../stores/configStore");
-  const glossary = useConfigStore.getState().deepgramConfig.keyterms;
+  const config = useConfigStore.getState();
+  const glossary = config.deepgramConfig.keyterms;
 
   return invoke("generate_assist", {
     mode,
     customQuestion,
     route,
     answerLength,
+    reasoningEffort: config.llmReasoningLevel,
     glossary,
     transcriptSegments: JSON.stringify(segments),
   });
@@ -300,6 +302,28 @@ export async function writeObsidianReview(options: {
   content: string;
 }): Promise<string> {
   const result = await invoke<string>("write_obsidian_review", {
+    directory: options.directory,
+    title: options.title,
+    meetingDate: options.meetingDate,
+    professorProfile: options.professorProfile,
+    content: options.content,
+  });
+  try {
+    const parsed = JSON.parse(result) as { path?: string };
+    return parsed.path ?? result;
+  } catch {
+    return result;
+  }
+}
+
+export async function appendObsidianMistakeBank(options: {
+  directory: string;
+  title: string;
+  meetingDate: string;
+  professorProfile?: string;
+  content: string;
+}): Promise<string> {
+  const result = await invoke<string>("append_obsidian_mistake_bank", {
     directory: options.directory,
     title: options.title,
     meetingDate: options.meetingDate,
@@ -419,8 +443,9 @@ export async function updateMeetingSummary(meetingId: string, summary: string): 
 export async function updateMeetingProfile(
   meetingId: string,
   professorProfile: string,
+  interviewProfileId?: string,
 ): Promise<void> {
-  return invoke("update_meeting_profile", { meetingId, professorProfile });
+  return invoke("update_meeting_profile", { meetingId, professorProfile, interviewProfileId });
 }
 
 // == IPC: In-Person Meeting Mode ==

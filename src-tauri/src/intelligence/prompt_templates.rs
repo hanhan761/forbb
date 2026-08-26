@@ -88,6 +88,11 @@ A 1-2 sentence high-level description of what the meeting covered.\n\
 - Identify answers that were incomplete, uncertain, or unsupported.\n\
 - List knowledge gaps or claims that should be verified before the next interview.\n\
 \n\
+### Mistake Bank\n\
+- Classify each weak point as Technical, Research, or English.\n\
+- For each item include the interviewer question, what was weak, the corrected knowledge or phrasing, and one next drill.\n\
+- If no mistakes were found, write: None found.\n\
+\n\
 ### Professor Focus and Next Preparation\n\
 - Summarize the professor's apparent research interests and recurring follow-up themes.\n\
 - Give concrete preparation suggestions for the next session.\n\

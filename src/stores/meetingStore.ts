@@ -69,6 +69,7 @@ interface MeetingState {
     audioMode?: AudioMode,
     scenario?: AIScenario,
     professorProfile?: string,
+    profileId?: string,
   ) => Promise<void>;
   endMeetingFlow: () => Promise<void>;
   loadRecentMeetings: () => Promise<void>;
@@ -129,6 +130,7 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
     audioMode?: AudioMode,
     scenario?: AIScenario,
     professorProfile?: string,
+    profileId?: string,
   ) => {
     try {
       // Resolve mode and scenario (fall back to current state if not provided)
@@ -138,6 +140,10 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
         professorProfile?.trim() ||
         useConfigStore.getState().rememberedMeetingSetup?.professorProfile?.trim() ||
         "";
+      const resolvedProfileId =
+        profileId?.trim() ||
+        useConfigStore.getState().rememberedMeetingSetup?.profileId?.trim() ||
+        undefined;
 
       // 1. Create meeting record in SQLite
       const meeting = await ipcStartMeeting(title);
@@ -153,7 +159,7 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
       try {
         const { updateMeetingMode, updateMeetingProfile } = await import("../lib/ipc");
         await updateMeetingMode(meeting.id, resolvedMode, resolvedScenario);
-        await updateMeetingProfile(meeting.id, resolvedProfessorProfile);
+        await updateMeetingProfile(meeting.id, resolvedProfessorProfile, resolvedProfileId);
       } catch { /* non-critical */ }
 
       // 1c. Initialize speaker store for the resolved mode

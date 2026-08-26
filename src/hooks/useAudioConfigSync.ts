@@ -12,6 +12,7 @@ import { useMeetingStore } from "../stores/meetingStore";
 import { useDevLogStore } from "../stores/devLogStore";
 import { useTranscriptStore } from "../stores/transcriptStore";
 import { stopCapture, startCapturePerParty } from "../lib/ipc";
+import { onAudioCaptureStatus } from "../lib/events";
 
 export function useAudioConfigSync() {
   const isRecording = useMeetingStore((s) => s.isRecording);
@@ -23,8 +24,56 @@ export function useAudioConfigSync() {
   const pendingConfigRef = useRef<string | null>(null);
   // Guard against concurrent restart attempts
   const restartingRef = useRef(false);
+  // Guard against duplicate backend recovery requests while a restart is in flight
+  const recoveringRef = useRef(false);
   // Debounce timer to batch rapid config changes
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Surface backend device-loss recovery in the existing diagnostic/status
+  // path so the user knows why the transcript may briefly pause.
+  useEffect(() => {
+    const unlistenPromise = onAudioCaptureStatus((event) => {
+      if (!useMeetingStore.getState().isRecording) return;
+      const addLog = useDevLogStore.getState().addEntry;
+      const reason = event.reason ? `: ${event.reason}` : "";
+      if (event.status === "degraded") {
+        addLog("warn", "audio", `Audio capture degraded${reason}`);
+      } else if (event.status === "recovering") {
+        addLog("info", "audio", `Reconnecting audio capture${reason}`);
+        if (recoveringRef.current || restartingRef.current) return;
+        recoveringRef.current = true;
+        void (async () => {
+          try {
+            const latestConfig = useConfigStore.getState().meetingAudioConfig;
+            if (!latestConfig || !useMeetingStore.getState().isRecording) return;
+
+            useTranscriptStore.getState().finalizeAllInterim();
+            await stopCapture();
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            if (!useMeetingStore.getState().isRecording) return;
+            const freshConfig = useConfigStore.getState().meetingAudioConfig;
+            if (!freshConfig) return;
+            await startCapturePerParty(freshConfig.you, freshConfig.them);
+            const freshKey = JSON.stringify(freshConfig);
+            appliedConfigRef.current = freshKey;
+            pendingConfigRef.current = freshKey;
+            addLog("info", "audio", "Audio capture recovered");
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            addLog("error", "audio", `Audio capture recovery failed: ${message}`);
+          } finally {
+            recoveringRef.current = false;
+          }
+        })();
+      } else if (event.status === "recovered") {
+        addLog("info", "audio", "Audio capture recovered");
+      } else if (event.status === "failed") {
+        addLog("error", "audio", `Audio capture recovery failed${reason}`);
+      }
+    });
+    return () => { unlistenPromise.then((unlisten) => unlisten()); };
+  }, []);
 
   useEffect(() => {
     if (!isRecording || !meetingAudioConfig) return;

@@ -3,6 +3,7 @@
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{SampleFormat, Stream};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
@@ -22,6 +23,18 @@ pub fn start_mic_capture(
     device_id: &str,
     tx: mpsc::Sender<AudioChunk>,
     source: AudioSource,
+) -> Result<Stream, String> {
+    start_mic_capture_with_error(device_id, tx, source, None)
+}
+
+/// Start an input capture stream and flip `error_flag` when cpal reports a
+/// terminal stream error. The flag is consumed by the meeting recovery loop;
+/// the callback stays non-blocking because it runs on cpal's audio thread.
+pub fn start_mic_capture_with_error(
+    device_id: &str,
+    tx: mpsc::Sender<AudioChunk>,
+    source: AudioSource,
+    error_flag: Option<Arc<AtomicBool>>,
 ) -> Result<Stream, String> {
     let device = super::device_manager::find_input_device(device_id)?;
 
@@ -43,7 +56,11 @@ pub fn start_mic_capture(
         sample_format
     );
 
-    let err_fn = |err: cpal::StreamError| {
+    let err_flag = error_flag.clone();
+    let err_fn = move |err: cpal::StreamError| {
+        if let Some(flag) = &err_flag {
+            flag.store(true, Ordering::SeqCst);
+        }
         log::error!("Mic capture stream error: {}", err);
     };
 
@@ -110,6 +127,15 @@ pub fn start_mic_capture_dual(
     device_id: &str,
     tx: mpsc::Sender<AudioChunk>,
 ) -> Result<Stream, String> {
+    start_mic_capture_dual_with_error(device_id, tx, None)
+}
+
+/// Dual-tagged input capture with terminal stream error reporting.
+pub fn start_mic_capture_dual_with_error(
+    device_id: &str,
+    tx: mpsc::Sender<AudioChunk>,
+    error_flag: Option<Arc<AtomicBool>>,
+) -> Result<Stream, String> {
     let device = super::device_manager::find_input_device(device_id)?;
     let device_name = device.name().unwrap_or_else(|_| "unknown".into());
     log::info!("Starting dual-tagged capture on device: {}", device_name);
@@ -122,7 +148,11 @@ pub fn start_mic_capture_dual(
     let channels = config.channels();
     let sample_format = config.sample_format();
 
-    let err_fn = |err: cpal::StreamError| {
+    let err_flag = error_flag.clone();
+    let err_fn = move |err: cpal::StreamError| {
+        if let Some(flag) = &err_flag {
+            flag.store(true, Ordering::SeqCst);
+        }
         log::error!("Dual capture stream error: {}", err);
     };
 

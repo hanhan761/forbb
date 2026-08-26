@@ -34,6 +34,17 @@ pub fn start_system_capture_device(
     stop_flag: Arc<AtomicBool>,
     device_name: Option<String>,
 ) -> Result<std::thread::JoinHandle<()>, String> {
+    start_system_capture_device_with_error(tx, stop_flag, device_name, None)
+}
+
+/// Start loopback capture and flip `error_flag` when the cpal stream reports a
+/// terminal error. The meeting recovery loop uses this to rebuild the stream.
+pub fn start_system_capture_device_with_error(
+    tx: mpsc::Sender<AudioChunk>,
+    stop_flag: Arc<AtomicBool>,
+    device_name: Option<String>,
+    error_flag: Option<Arc<AtomicBool>>,
+) -> Result<std::thread::JoinHandle<()>, String> {
     let label = device_name.as_deref().unwrap_or("default").to_string();
     log::info!("Starting system audio capture on: {}", label);
 
@@ -42,7 +53,11 @@ pub fn start_system_capture_device(
     let handle = std::thread::Builder::new()
         .name("system-audio-capture".into())
         .spawn(move || {
-            if let Err(e) = run_cpal_loopback(tx, stop_flag, device_name) {
+            let thread_error_flag = error_flag.clone();
+            if let Err(e) = run_cpal_loopback(tx, stop_flag, device_name, error_flag) {
+                if let Some(flag) = thread_error_flag {
+                    flag.store(true, Ordering::SeqCst);
+                }
                 log::error!("System audio capture failed: {}", e);
             }
         })
@@ -55,6 +70,7 @@ fn run_cpal_loopback(
     tx: mpsc::Sender<AudioChunk>,
     stop_flag: Arc<AtomicBool>,
     device_name: Option<String>,
+    error_flag: Option<Arc<AtomicBool>>,
 ) -> Result<(), String> {
     let host = cpal::default_host();
 
@@ -96,7 +112,11 @@ fn run_cpal_loopback(
     let sample_format = config.sample_format();
     log::info!("System capture: {}Hz, {}ch, {:?}", sample_rate, channels, sample_format);
 
-    let err_fn = |err: cpal::StreamError| {
+    let err_flag = error_flag.clone();
+    let err_fn = move |err: cpal::StreamError| {
+        if let Some(flag) = &err_flag {
+            flag.store(true, Ordering::SeqCst);
+        }
         log::error!("System capture error: {}", err);
     };
 

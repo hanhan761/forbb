@@ -51,6 +51,7 @@ pub enum QuestionType {
     Math,
     Professor,
     Latest,
+    UnknownTerm,
     FollowUp,
     Unknown,
 }
@@ -66,6 +67,7 @@ impl QuestionType {
             Self::Math => "math",
             Self::Professor => "professor",
             Self::Latest => "latest",
+            Self::UnknownTerm => "unknown_term",
             Self::FollowUp => "follow_up",
             Self::Unknown => "unknown",
         }
@@ -144,6 +146,68 @@ fn contains_any(text: &str, terms: &[&str]) -> bool {
     terms.iter().any(|term| text.contains(term))
 }
 
+/// Detect a likely unknown proper noun without sending another classifier
+/// request. This intentionally stays conservative: a quoted phrase, acronym,
+/// or capitalized multi-word name in a definition-style question is enough to
+/// justify web grounding; ordinary lowercase concepts remain on the fast path.
+fn looks_like_unknown_term(question: &str) -> bool {
+    let text = question.trim();
+    let lower = text.to_ascii_lowercase();
+    let definition_style = [
+        "what is ",
+        "what are ",
+        "what does ",
+        "what do ",
+        "who is ",
+        "meaning of ",
+        "define ",
+        "是什么",
+        "什么意思",
+        "谁是",
+    ]
+    .iter()
+    .any(|hint| lower.contains(hint));
+
+    if !definition_style {
+        return false;
+    }
+
+    if text.contains('"') || text.contains('\'') || text.contains('“') || text.contains('”') {
+        return true;
+    }
+
+    let acronym_like = text
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|word| word.len() >= 2)
+        .any(|word| word.chars().all(|character| !character.is_ascii_lowercase()));
+    if acronym_like {
+        return true;
+    }
+
+    // Look for a capitalized word after the question lead-in. This catches
+    // names such as “What is Amdahl's law?” while avoiding the initial “What”.
+    let mut saw_definition_word = false;
+    for word in text.split_whitespace() {
+        let normalized = word.trim_matches(|character: char| !character.is_ascii_alphabetic());
+        if !saw_definition_word {
+            if ["is", "are", "does", "do", "of", "define", "who"]
+                .iter()
+                .any(|candidate| normalized.eq_ignore_ascii_case(candidate))
+            {
+                saw_definition_word = true;
+            }
+            continue;
+        }
+        if normalized.len() >= 3
+            && normalized.chars().next().is_some_and(|character| character.is_ascii_uppercase())
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Classify the question using stable, low-latency lexical rules.
 pub fn classify_question(mode: &str, question: &str) -> QuestionType {
     let text = question.trim().to_ascii_lowercase();
@@ -174,6 +238,9 @@ pub fn classify_question(mode: &str, question: &str) -> QuestionType {
     if contains_any(&text, MATH_TERMS) {
         return QuestionType::Math;
     }
+    if looks_like_unknown_term(question) {
+        return QuestionType::UnknownTerm;
+    }
     QuestionType::Unknown
 }
 
@@ -191,7 +258,7 @@ pub fn resolve_route(override_route: Option<&str>, mode: &str, question: &str) -
         QuestionType::Personal | QuestionType::Project | QuestionType::Research | QuestionType::Course => {
             QueryRoute::SearchFiles
         }
-        QuestionType::Professor | QuestionType::Latest => QueryRoute::SearchWeb,
+        QuestionType::Professor | QuestionType::Latest | QuestionType::UnknownTerm => QueryRoute::SearchWeb,
         QuestionType::FollowUp => QueryRoute::QuickAnswer,
         QuestionType::Algorithm | QuestionType::Math => QueryRoute::QuickAnswer,
         QuestionType::Unknown if mode == "AskQuestion" => QueryRoute::AskCodex,
@@ -231,5 +298,19 @@ mod tests {
         let decision = resolve_route(Some("search_web"), "Assist", "Tell me about my resume");
         assert_eq!(decision.route, QueryRoute::SearchWeb);
         assert_eq!(decision.question_type, QuestionType::Personal);
+    }
+
+    #[test]
+    fn routes_likely_unknown_proper_nouns_to_web() {
+        let decision = resolve_route(None, "AskQuestion", "What is Amdahl's law?");
+        assert_eq!(decision.route, QueryRoute::SearchWeb);
+        assert_eq!(decision.question_type, QuestionType::UnknownTerm);
+    }
+
+    #[test]
+    fn keeps_generic_lowercase_concepts_on_fast_path() {
+        let decision = resolve_route(None, "Assist", "What is a hash map?");
+        assert_eq!(decision.route, QueryRoute::QuickAnswer);
+        assert_eq!(decision.question_type, QuestionType::Unknown);
     }
 }

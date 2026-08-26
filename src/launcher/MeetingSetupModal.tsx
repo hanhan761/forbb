@@ -3,7 +3,7 @@ import { useConfigStore } from "../stores/configStore";
 import { prepareInterview, setRecordingEnabled } from "../lib/ipc";
 import { BUILT_IN_SCENARIOS } from "../lib/scenarios";
 import { MODE_COLORS } from "../lib/speakerColors";
-import type { AudioMode, AIScenario, PrepareCheck } from "../lib/types";
+import type { AudioMode, AIScenario, InterviewProfile, PrepareCheck } from "../lib/types";
 import {
   Monitor,
   Mic,
@@ -15,11 +15,18 @@ import {
   Square,
   AlertTriangle,
   Loader2,
+  Save,
+  Trash2,
 } from "lucide-react";
 
 interface MeetingSetupModalProps {
   open: boolean;
-  onStart: (audioMode: AudioMode, scenario: AIScenario, professorProfile: string) => void;
+  onStart: (
+    audioMode: AudioMode,
+    scenario: AIScenario,
+    professorProfile: string,
+    profileId?: string,
+  ) => void;
   onCancel: () => void;
 }
 
@@ -28,9 +35,23 @@ function getScenarioName(id: AIScenario): string {
   return BUILT_IN_SCENARIOS.find((s) => s.id === id)?.name ?? id;
 }
 
+function profileToText(profile: Pick<InterviewProfile, "school" | "professor" | "lab" | "notes">): string {
+  return [
+    profile.school.trim() && `School: ${profile.school.trim()}`,
+    profile.professor.trim() && `Professor: ${profile.professor.trim()}`,
+    profile.lab.trim() && `Lab / group: ${profile.lab.trim()}`,
+    profile.notes.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModalProps) {
   const rememberedSetup = useConfigStore((s) => s.rememberedMeetingSetup);
+  const interviewProfiles = useConfigStore((s) => s.interviewProfiles);
   const setRememberedMeetingSetup = useConfigStore((s) => s.setRememberedMeetingSetup);
+  const saveInterviewProfile = useConfigStore((s) => s.saveInterviewProfile);
+  const deleteInterviewProfile = useConfigStore((s) => s.deleteInterviewProfile);
   const recordingEnabled = useConfigStore((s) => s.recordingEnabled);
   const setRecordingEnabledStore = useConfigStore((s) => s.setRecordingEnabled);
 
@@ -41,9 +62,12 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
   const [scenario, setScenario] = useState<AIScenario>(
     rememberedSetup?.scenario ?? "team_meeting"
   );
-  const [professorProfile, setProfessorProfile] = useState(
-    rememberedSetup?.professorProfile ?? ""
-  );
+  const [profileId, setProfileId] = useState(rememberedSetup?.profileId ?? "");
+  const [profileName, setProfileName] = useState("");
+  const [school, setSchool] = useState("");
+  const [professor, setProfessor] = useState("");
+  const [lab, setLab] = useState("");
+  const [profileNotes, setProfileNotes] = useState(rememberedSetup?.professorProfile ?? "");
   const [remember, setRemember] = useState(rememberedSetup !== null);
   const [showScenarioPicker, setShowScenarioPicker] = useState(false);
   // When remembered setup exists, start in compact view; user can expand
@@ -60,7 +84,15 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
     const hasRemembered = rememberedSetup !== null;
     setAudioMode(rememberedSetup?.audioMode ?? "online");
     setScenario(rememberedSetup?.scenario ?? "team_meeting");
-    setProfessorProfile(rememberedSetup?.professorProfile ?? "");
+    const rememberedProfile = rememberedSetup?.profileId
+      ? interviewProfiles.find((profile) => profile.id === rememberedSetup.profileId)
+      : undefined;
+    setProfileId(rememberedProfile?.id ?? "");
+    setProfileName(rememberedProfile?.name ?? "");
+    setSchool(rememberedProfile?.school ?? "");
+    setProfessor(rememberedProfile?.professor ?? "");
+    setLab(rememberedProfile?.lab ?? "");
+    setProfileNotes(rememberedProfile?.notes ?? rememberedSetup?.professorProfile ?? "");
     setRemember(hasRemembered);
     setIsExpanded(!hasRemembered);
     setShowScenarioPicker(false);
@@ -86,18 +118,78 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
   );
 
   const handleStart = useCallback(() => {
+    const professorProfile = profileToText({ school, professor, lab, notes: profileNotes });
+    let savedProfileId = profileId || undefined;
+    if (profileName.trim() && professorProfile) {
+      savedProfileId = saveInterviewProfile({
+        id: profileId || undefined,
+        name: profileName.trim(),
+        school: school.trim(),
+        professor: professor.trim(),
+        lab: lab.trim(),
+        notes: profileNotes.trim(),
+      });
+      setProfileId(savedProfileId);
+    }
     if (remember) {
       setRememberedMeetingSetup({
         audioMode,
         scenario,
-        professorProfile: professorProfile.trim() || undefined,
+        professorProfile: professorProfile || undefined,
+        profileId: savedProfileId,
       });
     } else {
       // If unchecked, clear any existing remembered setup
       setRememberedMeetingSetup(null);
     }
-    onStart(audioMode, scenario, professorProfile.trim());
-  }, [audioMode, scenario, professorProfile, remember, setRememberedMeetingSetup, onStart]);
+    onStart(audioMode, scenario, professorProfile.trim(), savedProfileId);
+  }, [audioMode, scenario, profileId, profileName, school, professor, lab, profileNotes, remember, saveInterviewProfile, setRememberedMeetingSetup, onStart]);
+
+  const composedProfile = profileToText({ school, professor, lab, notes: profileNotes });
+
+  const handleProfileSelect = useCallback((nextId: string) => {
+    setProfileId(nextId);
+    if (!nextId) {
+      setProfileName("");
+      setSchool("");
+      setProfessor("");
+      setLab("");
+      setProfileNotes("");
+      return;
+    }
+    const profile = interviewProfiles.find((item) => item.id === nextId);
+    if (!profile) return;
+    setProfileName(profile.name);
+    setSchool(profile.school);
+    setProfessor(profile.professor);
+    setLab(profile.lab);
+    setProfileNotes(profile.notes);
+  }, [interviewProfiles]);
+
+  const handleSaveProfile = useCallback(() => {
+    const nextName = profileName.trim() || professor.trim() || school.trim() || "Interview profile";
+    const nextId = saveInterviewProfile({
+      id: profileId || undefined,
+      name: nextName,
+      school: school.trim(),
+      professor: professor.trim(),
+      lab: lab.trim(),
+      notes: profileNotes.trim(),
+    });
+    setProfileId(nextId);
+    setProfileName(nextName);
+  }, [profileId, profileName, professor, school, lab, profileNotes, saveInterviewProfile]);
+
+  const handleDeleteProfile = useCallback(() => {
+    if (!profileId) return;
+    deleteInterviewProfile(profileId);
+    setProfileId("");
+    setProfileName("");
+    setSchool("");
+    setProfessor("");
+    setLab("");
+    setProfileNotes("");
+  }, [profileId, deleteInterviewProfile]);
 
   const handleForget = useCallback(() => {
     setRememberedMeetingSetup(null);
@@ -121,7 +213,7 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
         systemDeviceId: audio?.them.device_id || config.systemDeviceId || undefined,
         audioMode,
         sttProviders: [...new Set(providers)],
-        professorProfile: professorProfile.trim() || undefined,
+        professorProfile: composedProfile || undefined,
       });
       setPreflightChecks(checks);
     } catch (err) {
@@ -130,7 +222,7 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
     } finally {
       setIsChecking(false);
     }
-  }, [audioMode, isChecking, professorProfile]);
+  }, [audioMode, isChecking, composedProfile]);
 
   if (!open) return null;
 
@@ -240,8 +332,8 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
                 <span className="rounded-full border border-border/30 bg-accent/20 px-2.5 py-1 text-xs font-medium text-foreground/80">
                   {getScenarioName(scenario)}
                 </span>
-                {professorProfile.trim() && (
-                  <span className="max-w-[150px] truncate rounded-full border border-info/20 bg-info/10 px-2.5 py-1 text-[10px] font-medium text-info" title={professorProfile.trim()}>
+                {composedProfile && (
+                  <span className="max-w-[150px] truncate rounded-full border border-info/20 bg-info/10 px-2.5 py-1 text-[10px] font-medium text-info" title={composedProfile}>
                     Profile set
                   </span>
                 )}
@@ -405,20 +497,78 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
               </div>
             </div>
 
-            {/* ── Professor / Lab Profile ── */}
+            {/* ── School / Professor / Lab Profile ── */}
             <div>
               <div className="mb-2.5 flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                  Professor / Lab Profile
+                  School / Professor / Lab Profile
                 </p>
-                <span className="text-[10px] text-muted-foreground/50">optional</span>
+                <span className="text-[10px] text-muted-foreground/50">local only · optional</span>
+              </div>
+              <div className="mb-2 flex gap-2">
+                <select
+                  value={profileId}
+                  onChange={(event) => handleProfileSelect(event.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-border/30 bg-secondary/10 px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50"
+                  aria-label="Saved interview profile"
+                >
+                  <option value="">New / unsaved profile</option>
+                  {interviewProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  className="flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-[11px] font-medium text-primary hover:bg-primary/10 cursor-pointer"
+                  title="Save this profile locally"
+                >
+                  <Save className="h-3 w-3" /> Save
+                </button>
+                {profileId && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteProfile}
+                    className="rounded-lg border border-destructive/20 px-2.5 py-2 text-destructive/70 hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+                    title="Delete saved profile"
+                    aria-label="Delete saved profile"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              <input
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                placeholder="Profile name, e.g. Tsinghua · Prof. Li"
+                className="mb-2 w-full rounded-lg border border-border/30 bg-secondary/10 px-3 py-2 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-primary/50"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  value={school}
+                  onChange={(event) => setSchool(event.target.value)}
+                  placeholder="School"
+                  className="rounded-lg border border-border/30 bg-secondary/10 px-3 py-2 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-primary/50"
+                />
+                <input
+                  value={professor}
+                  onChange={(event) => setProfessor(event.target.value)}
+                  placeholder="Professor"
+                  className="rounded-lg border border-border/30 bg-secondary/10 px-3 py-2 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-primary/50"
+                />
+                <input
+                  value={lab}
+                  onChange={(event) => setLab(event.target.value)}
+                  placeholder="Lab / group"
+                  className="rounded-lg border border-border/30 bg-secondary/10 px-3 py-2 text-xs text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-primary/50"
+                />
               </div>
               <textarea
-                value={professorProfile}
-                onChange={(e) => setProfessorProfile(e.target.value)}
+                value={profileNotes}
+                onChange={(event) => setProfileNotes(event.target.value)}
                 rows={3}
-                placeholder="School, professor, lab, research interests, recent papers…"
-                className="w-full resize-none rounded-xl border border-border/30 bg-secondary/10 px-3.5 py-2.5 text-xs leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50 focus:bg-secondary/20"
+                placeholder="Research interests, recent papers, interview focus…"
+                className="mt-2 w-full resize-none rounded-xl border border-border/30 bg-secondary/10 px-3.5 py-2.5 text-xs leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50 focus:bg-secondary/20"
               />
               <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/50">
                 Used only as session context for follow-up and professor-related questions. It never controls the meeting app.
