@@ -1,4 +1,5 @@
 pub mod anthropic;
+pub mod codex;
 pub mod custom;
 pub mod gemini;
 pub mod gemini_cache;
@@ -17,6 +18,7 @@ use tokio::sync::Mutex as TokioMutex;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderType {
+    Codex,
     Ollama,
     LmStudio,
     Openai,
@@ -30,6 +32,7 @@ pub enum ProviderType {
 impl ProviderType {
     pub fn from_str(s: &str) -> Result<Self, LLMError> {
         match s {
+            "codex" | "codex_app_server" => Ok(Self::Codex),
             "ollama" => Ok(Self::Ollama),
             "lm_studio" => Ok(Self::LmStudio),
             "openai" => Ok(Self::Openai),
@@ -47,6 +50,7 @@ impl ProviderType {
 
     pub fn as_str(&self) -> &str {
         match self {
+            Self::Codex => "codex",
             Self::Ollama => "ollama",
             Self::LmStudio => "lm_studio",
             Self::Openai => "openai",
@@ -60,6 +64,7 @@ impl ProviderType {
 
     pub fn display_name(&self) -> &str {
         match self {
+            Self::Codex => "Codex (local)",
             Self::Ollama => "Ollama",
             Self::LmStudio => "LM Studio",
             Self::Openai => "OpenAI",
@@ -73,6 +78,7 @@ impl ProviderType {
 
     pub fn default_base_url(&self) -> &str {
         match self {
+            Self::Codex => "codex app-server (stdio)",
             Self::Ollama => "http://localhost:11434",
             Self::LmStudio => "http://localhost:1234/v1",
             Self::Openai => "https://api.openai.com/v1",
@@ -85,14 +91,11 @@ impl ProviderType {
     }
 
     pub fn requires_api_key(&self) -> bool {
-        matches!(
-            self,
-            Self::Openai | Self::Anthropic | Self::Groq | Self::Gemini | Self::Openrouter
-        )
+        matches!(self, Self::Openai | Self::Anthropic | Self::Groq | Self::Gemini | Self::Openrouter)
     }
 
     pub fn is_local(&self) -> bool {
-        matches!(self, Self::Ollama | Self::LmStudio)
+        matches!(self, Self::Codex | Self::Ollama | Self::LmStudio)
     }
 }
 
@@ -144,6 +147,7 @@ impl LLMRouter {
         let provider_type = ProviderType::from_str(&config.provider_type)?;
 
         let provider: Box<dyn LLMProvider> = match &provider_type {
+            ProviderType::Codex => Box::new(codex::CodexClient::new()),
             ProviderType::Ollama => {
                 Box::new(ollama::OllamaClient::new(config.base_url.as_deref()))
             }
@@ -249,9 +253,18 @@ impl LLMRouter {
         was_cancelled
     }
 
+    /// Reset provider-local session state at the start/end of an interview.
+    /// Providers that do not keep a session use the trait's no-op default.
+    pub async fn reset_session(&self) -> Result<(), LLMError> {
+        let provider = self.get_provider()?;
+        let result = provider.lock().await.reset_session().await;
+        result
+    }
+
     /// Get information about all available providers.
     pub fn get_all_providers() -> Vec<ProviderInfo> {
         let all_types = [
+            ProviderType::Codex,
             ProviderType::Ollama,
             ProviderType::LmStudio,
             ProviderType::Openai,

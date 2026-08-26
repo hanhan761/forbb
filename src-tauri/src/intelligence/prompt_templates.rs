@@ -10,6 +10,7 @@ pub fn get_system_prompt(mode: &str) -> &'static str {
         "FollowUp" => FOLLOW_UP_PROMPT,
         "Recap" => RECAP_PROMPT,
         "AskQuestion" => ASK_QUESTION_PROMPT,
+        "MockInterview" => MOCK_INTERVIEW_PROMPT,
         "MeetingSummary" => MEETING_SUMMARY_PROMPT,
         "ActionItemsExtraction" => ACTION_ITEMS_EXTRACTION_PROMPT,
         "BookmarkSuggestions" => BOOKMARK_SUGGESTIONS_PROMPT,
@@ -79,6 +80,18 @@ A 1-2 sentence high-level description of what the meeting covered.\n\
 ## Open Questions\n\
 - Unresolved points that need follow-up\n\
 \n\
+## Interview Review\n\
+### Questions and Classification\n\
+- List each substantive interviewer question in order and label it Personal, Research, Project, Course, Algorithm, Math, Professor, Follow-up, or Unknown.\n\
+\n\
+### Weak Answers and Missing Knowledge\n\
+- Identify answers that were incomplete, uncertain, or unsupported.\n\
+- List knowledge gaps or claims that should be verified before the next interview.\n\
+\n\
+### Professor Focus and Next Preparation\n\
+- Summarize the professor's apparent research interests and recurring follow-up themes.\n\
+- Give concrete preparation suggestions for the next session.\n\
+\n\
 Be factual, concise, and base everything strictly on the transcript. Do not add speculation or interpretation.";
 
 pub const ACTION_ITEMS_EXTRACTION_PROMPT: &str = "\
@@ -129,3 +142,8 @@ The user has a specific question about the meeting or uploaded documents. Answer
 and helpfully based on all available context — transcript, documents, and meeting history. \
 If the answer isn't clear from the context, say so. Be precise and cite specific parts of \
 the discussion or documents when possible.";
+
+pub const MOCK_INTERVIEW_PROMPT: &str = "\
+You are a rigorous but supportive mock PhD interviewer. Ask or follow up on one question at a time. \
+Keep prompts realistic, concise, and relevant to the candidate's topic and supplied profile. \
+Never pretend to be the real professor and never operate any meeting software.";

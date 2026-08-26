@@ -36,6 +36,8 @@ use commands::meeting_commands;
 use commands::settings_commands;
 // == MODULE COMMANDS: models ==
 use commands::model_commands;
+// == MODULE COMMANDS: interview preparation ==
+use commands::prepare_commands;
 // == MODULE COMMANDS: stealth ==
 use commands::stealth_commands;
 // == MODULE COMMANDS: gemini cache ==
@@ -273,18 +275,29 @@ pub fn run() {
             // -- Initialize LLMRouter with auto-detected provider --
             let mut llm_router = llm::LLMRouter::new();
 
-            // Try to auto-detect Ollama as default provider (no API key needed)
-            let ollama_config = llm::ProviderConfig {
-                provider_type: "ollama".to_string(),
+            // Prefer the locally authenticated Codex app-server when the CLI
+            // is installed; fall back to Ollama for existing local setups.
+            let default_provider = if llm::codex::is_available() {
+                "codex"
+            } else {
+                "ollama"
+            };
+            let default_llm_config = llm::ProviderConfig {
+                provider_type: default_provider.to_string(),
                 api_key: None,
                 base_url: None,
                 auth_type: None,
                 auth_value: None,
                 auth_header: None,
             };
-            match llm_router.set_provider(ollama_config) {
+            match llm_router.set_provider(default_llm_config) {
                 Ok(()) => {
-                    log::info!("LLM router: Ollama set as default provider");
+                    if default_provider == "codex" {
+                        llm_router.set_active_model("codex-default".to_string());
+                        log::info!("LLM router: local Codex app-server set as default provider");
+                    } else {
+                        log::info!("LLM router: Ollama set as default provider");
+                    }
                 }
                 Err(e) => {
                     log::warn!("LLM router: Failed to set Ollama as default: {}", e);
@@ -529,6 +542,7 @@ pub fn run() {
             llm_commands::list_models,
             llm_commands::set_active_model,
             llm_commands::test_llm_connection,
+            llm_commands::reset_llm_session,
             llm_commands::get_llm_providers,
             llm_commands::list_openrouter_models,
             // == COMMANDS: intelligence ==
@@ -544,6 +558,7 @@ pub fn run() {
             // == COMMANDS: context ==
             context_commands::load_context_file,
             context_commands::import_obsidian_vault,
+            context_commands::write_obsidian_review,
             context_commands::remove_context_file,
             context_commands::list_context_resources,
             context_commands::set_custom_instructions,
@@ -565,6 +580,7 @@ pub fn run() {
             meeting_commands::save_meeting_ai_interactions,
             meeting_commands::rename_meeting,
             meeting_commands::update_meeting_summary,
+            meeting_commands::update_meeting_profile,
             meeting_commands::save_meeting_speakers,
             meeting_commands::save_meeting_bookmarks,
             meeting_commands::add_meeting_bookmark,
@@ -584,6 +600,8 @@ pub fn run() {
             model_commands::download_local_stt_model,
             model_commands::cancel_model_download,
             model_commands::delete_local_stt_model,
+            // == COMMANDS: interview preparation ==
+            prepare_commands::prepare_interview,
             // == COMMANDS: stealth ==
             stealth_commands::set_stealth_mode,
             // == COMMANDS: tray ==

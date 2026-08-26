@@ -2,6 +2,7 @@ pub mod action_config;
 pub mod context_builder;
 pub mod prompt_templates;
 pub mod question_detector;
+pub mod query_router;
 pub mod transcript_buffer;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -103,6 +104,11 @@ impl IntelligenceEngine {
         params: GenerationParams,
         // New metadata fields for StreamStartEvent
         temperature: f64,
+        answer_length: String,
+        route: String,
+        question_type: String,
+        answer_source: String,
+        confidence: String,
         rag_query: Option<String>,
         rag_chunks: Vec<crate::llm::provider::RagChunkInfo>,
         rag_chunks_filtered: usize,
@@ -160,6 +166,11 @@ impl IntelligenceEngine {
                 include_instructions,
                 include_question,
                 temperature,
+                answer_length,
+                route,
+                question_type,
+                answer_source,
+                confidence,
                 rag_query,
                 rag_chunks,
                 rag_chunks_filtered,

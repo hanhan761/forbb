@@ -8,6 +8,7 @@ import { showToast } from "../stores/toastStore";
 import { RecentMeetings } from "./RecentMeetings";
 import { MeetingDetails } from "./meeting-details";
 import { MeetingSetupModal } from "./MeetingSetupModal";
+import { MockInterviewPanel } from "./MockInterviewPanel";
 import { FileUpload } from "../context/FileUpload";
 import { ResourceCard } from "../context/ResourceCard";
 import { TokenBudget } from "../context/TokenBudget";
@@ -31,6 +32,7 @@ import {
   Radio,
   Play,
   FlaskConical,
+  MessageSquare,
 } from "lucide-react";
 
 // ── Favorites (localStorage) ──
@@ -88,8 +90,13 @@ export function LauncherView() {
   const [ragStatus, setRagStatus] = useState<"idle" | "updating" | "done">("idle");
   const [showTestKB, setShowTestKB] = useState(false);
   const [showMeetingSetup, setShowMeetingSetup] = useState(false);
-  // Pending audioMode/scenario from setup modal — used when conflict resolution triggers start
-  const pendingMeetingSetup = useRef<{ audioMode: AudioMode; scenario: AIScenario } | null>(null);
+  const [showMockInterview, setShowMockInterview] = useState(false);
+  // Pending setup from the modal — used when conflict resolution triggers start
+  const pendingMeetingSetup = useRef<{
+    audioMode: AudioMode;
+    scenario: AIScenario;
+    professorProfile: string;
+  } | null>(null);
 
   const contextStrategy = useConfigStore((s) => s.contextStrategy);
   const rememberedMeetingSetup = useConfigStore((s) => s.rememberedMeetingSetup);
@@ -126,12 +133,16 @@ export function LauncherView() {
   }, [activeMeeting]);
 
   // Called when user confirms setup in the modal
-  const handleSetupConfirm = useCallback(async (audioMode: AudioMode, scenario: AIScenario) => {
+  const handleSetupConfirm = useCallback(async (
+    audioMode: AudioMode,
+    scenario: AIScenario,
+    professorProfile: string,
+  ) => {
     setShowMeetingSetup(false);
     setIsStarting(true);
     setStartError(null);
     try {
-      await startMeetingFlow(undefined, audioMode, scenario);
+      await startMeetingFlow(undefined, audioMode, scenario, professorProfile);
       showToast("Meeting started", "success");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to start meeting";
@@ -149,7 +160,7 @@ export function LauncherView() {
     pendingMeetingSetup.current = null;
     try {
       await endMeetingFlow();
-      await startMeetingFlow(undefined, setup?.audioMode, setup?.scenario);
+      await startMeetingFlow(undefined, setup?.audioMode, setup?.scenario, setup?.professorProfile);
       showToast("New meeting started", "success");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to start";
@@ -384,6 +395,16 @@ export function LauncherView() {
                 </div>
               </button>
 
+              <button
+                onClick={() => setShowMockInterview(true)}
+                disabled={isStarting || !!activeMeeting}
+                className="mt-2 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground/70 transition-colors hover:bg-secondary/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+                title={activeMeeting ? "End the live meeting before starting practice" : "Practice without audio or meeting control"}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Mock Interview · text only
+              </button>
+
               {startError && (
                 <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs text-destructive">
                   {startError}
@@ -522,6 +543,10 @@ export function LauncherView() {
         onStart={handleSetupConfirm}
         onCancel={() => setShowMeetingSetup(false)}
       />
+
+      {showMockInterview && (
+        <MockInterviewPanel onClose={() => setShowMockInterview(false)} />
+      )}
 
       {/* ═══ TEST KNOWLEDGE BASE MODAL ═══ */}
       <TestSearchDialog isOpen={showTestKB} onClose={() => setShowTestKB(false)} />

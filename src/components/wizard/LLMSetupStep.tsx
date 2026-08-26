@@ -79,11 +79,7 @@ export function LLMSetupStep({
   const hasLocalLLM = ollamaRunning || lmStudioRunning;
 
   const [selectedProvider, setSelectedProvider] = useState<LLMProviderType>(
-    hasLocalLLM
-      ? ollamaRunning
-        ? "ollama"
-        : "lm_studio"
-      : "anthropic"
+    "codex"
   );
   const [selectedModel, setSelectedModel] = useState(llmModel || "");
   const [apiKey, setApiKeyValue] = useState("");
@@ -96,7 +92,9 @@ export function LLMSetupStep({
 
   // Auto-load models for local providers
   useEffect(() => {
-    if (selectedProvider === "ollama" && ollamaRunning) {
+    if (selectedProvider === "codex") {
+      handleLoadModels();
+    } else if (selectedProvider === "ollama" && ollamaRunning) {
       handleLoadModels();
     } else if (selectedProvider === "lm_studio" && lmStudioRunning) {
       handleLoadModels();
@@ -220,12 +218,19 @@ export function LLMSetupStep({
         )}
 
         {/* Local Provider Cards */}
-        {hasLocalLLM && (
-          <div className="space-y-2">
+        <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Local Providers
             </p>
             <div className="grid gap-2">
+              <ProviderButton
+                label="Codex (local)"
+                description="Uses your local Codex login via app-server"
+                icon={<Brain className="h-5 w-5" />}
+                selected={selectedProvider === "codex"}
+                recommended
+                onClick={() => handleProviderSelect("codex")}
+              />
               {ollamaRunning && (
                 <ProviderButton
                   label="Ollama"
@@ -247,7 +252,6 @@ export function LLMSetupStep({
               )}
             </div>
           </div>
-        )}
 
         {/* Cloud Provider Cards */}
         <div className="space-y-2">
@@ -375,8 +379,10 @@ export function LLMSetupStep({
         <div className="rounded-xl border border-border/20 bg-secondary/20 px-5 py-4">
           <p className="text-xs text-muted-foreground leading-relaxed">
             <span className="font-medium text-foreground">Tip: </span>
-            {hasLocalLLM
-              ? "For privacy and speed, we recommend using Ollama with llama3.2. Your conversations never leave your machine."
+            {selectedProvider === "codex"
+              ? "Codex uses your local CLI login through a hidden stdio app-server. NexQ does not control the meeting window or enter text into it."
+              : hasLocalLLM
+                ? "For privacy and speed, we recommend using Ollama with llama3.2. Your conversations never leave your machine."
               : "For the best experience, we recommend Anthropic Claude. For local privacy, install Ollama and run it before starting NexQ."}
           </p>
         </div>

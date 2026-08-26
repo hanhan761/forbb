@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useConfigStore } from "../stores/configStore";
-import { setRecordingEnabled } from "../lib/ipc";
+import { prepareInterview, setRecordingEnabled } from "../lib/ipc";
 import { BUILT_IN_SCENARIOS } from "../lib/scenarios";
 import { MODE_COLORS } from "../lib/speakerColors";
-import type { AudioMode, AIScenario } from "../lib/types";
+import type { AudioMode, AIScenario, PrepareCheck } from "../lib/types";
 import {
   Monitor,
   Mic,
@@ -13,11 +13,13 @@ import {
   RotateCcw,
   CheckSquare,
   Square,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 
 interface MeetingSetupModalProps {
   open: boolean;
-  onStart: (audioMode: AudioMode, scenario: AIScenario) => void;
+  onStart: (audioMode: AudioMode, scenario: AIScenario, professorProfile: string) => void;
   onCancel: () => void;
 }
 
@@ -39,10 +41,16 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
   const [scenario, setScenario] = useState<AIScenario>(
     rememberedSetup?.scenario ?? "team_meeting"
   );
+  const [professorProfile, setProfessorProfile] = useState(
+    rememberedSetup?.professorProfile ?? ""
+  );
   const [remember, setRemember] = useState(rememberedSetup !== null);
   const [showScenarioPicker, setShowScenarioPicker] = useState(false);
   // When remembered setup exists, start in compact view; user can expand
   const [isExpanded, setIsExpanded] = useState(rememberedSetup === null);
+  const [preflightChecks, setPreflightChecks] = useState<PrepareCheck[]>([]);
+  const [isChecking, setIsChecking] = useState(false);
+  const [preflightError, setPreflightError] = useState<string | null>(null);
 
   const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -52,9 +60,12 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
     const hasRemembered = rememberedSetup !== null;
     setAudioMode(rememberedSetup?.audioMode ?? "online");
     setScenario(rememberedSetup?.scenario ?? "team_meeting");
+    setProfessorProfile(rememberedSetup?.professorProfile ?? "");
     setRemember(hasRemembered);
     setIsExpanded(!hasRemembered);
     setShowScenarioPicker(false);
+    setPreflightChecks([]);
+    setPreflightError(null);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close on Escape
@@ -76,19 +87,50 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
 
   const handleStart = useCallback(() => {
     if (remember) {
-      setRememberedMeetingSetup({ audioMode, scenario });
+      setRememberedMeetingSetup({
+        audioMode,
+        scenario,
+        professorProfile: professorProfile.trim() || undefined,
+      });
     } else {
       // If unchecked, clear any existing remembered setup
       setRememberedMeetingSetup(null);
     }
-    onStart(audioMode, scenario);
-  }, [audioMode, scenario, remember, setRememberedMeetingSetup, onStart]);
+    onStart(audioMode, scenario, professorProfile.trim());
+  }, [audioMode, scenario, professorProfile, remember, setRememberedMeetingSetup, onStart]);
 
   const handleForget = useCallback(() => {
     setRememberedMeetingSetup(null);
     setRemember(false);
     setIsExpanded(true);
   }, [setRememberedMeetingSetup]);
+
+  const handlePrepare = useCallback(async () => {
+    if (isChecking) return;
+    setIsChecking(true);
+    setPreflightError(null);
+    try {
+      const config = useConfigStore.getState();
+      const audio = config.meetingAudioConfig;
+      const providers = [
+        audio?.you.stt_provider ?? config.sttProvider,
+        audio?.them.stt_provider ?? config.sttProvider,
+      ];
+      const checks = await prepareInterview({
+        micDeviceId: audio?.you.device_id || config.micDeviceId || undefined,
+        systemDeviceId: audio?.them.device_id || config.systemDeviceId || undefined,
+        audioMode,
+        sttProviders: [...new Set(providers)],
+        professorProfile: professorProfile.trim() || undefined,
+      });
+      setPreflightChecks(checks);
+    } catch (err) {
+      setPreflightError(err instanceof Error ? err.message : String(err));
+      setPreflightChecks([]);
+    } finally {
+      setIsChecking(false);
+    }
+  }, [audioMode, isChecking, professorProfile]);
 
   if (!open) return null;
 
@@ -135,6 +177,35 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
           </button>
         </div>
 
+        {/* Read-only preflight — never starts capture or touches the meeting app. */}
+        <div className="border-b border-border/20 px-5 py-2.5">
+          <button
+            onClick={handlePrepare}
+            disabled={isChecking}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/30 bg-secondary/20 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isChecking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckSquare className="h-3.5 w-3.5" />}
+            {isChecking ? "Checking setup..." : "Prepare interview · check setup"}
+          </button>
+          {preflightError && (
+            <p className="mt-2 text-[11px] text-destructive">{preflightError}</p>
+          )}
+          {preflightChecks.length > 0 && (
+            <div className="mt-2.5 space-y-1.5">
+              {preflightChecks.map((item) => (
+                <div key={item.id} className="flex items-start gap-2 text-[11px]">
+                  <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${item.status === "ready" ? "bg-success" : item.status === "error" ? "bg-destructive" : "bg-warning"}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium text-foreground/80">{item.label}</span>
+                    <span className="ml-1 text-muted-foreground/60">{item.detail}</span>
+                  </span>
+                  {item.required && item.status === "error" && <AlertTriangle className="h-3 w-3 shrink-0 text-destructive" />}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* ── COMPACT VIEW (remembered, not expanded) ── */}
         {!isExpanded && rememberedSetup !== null ? (
           <div className="px-5 py-4 space-y-4">
@@ -169,6 +240,11 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
                 <span className="rounded-full border border-border/30 bg-accent/20 px-2.5 py-1 text-xs font-medium text-foreground/80">
                   {getScenarioName(scenario)}
                 </span>
+                {professorProfile.trim() && (
+                  <span className="max-w-[150px] truncate rounded-full border border-info/20 bg-info/10 px-2.5 py-1 text-[10px] font-medium text-info" title={professorProfile.trim()}>
+                    Profile set
+                  </span>
+                )}
                 {/* REC badge */}
                 {recordingEnabled && (
                   <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive ring-1 ring-destructive/20">
@@ -327,6 +403,26 @@ export function MeetingSetupModal({ open, onStart, onCancel }: MeetingSetupModal
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* ── Professor / Lab Profile ── */}
+            <div>
+              <div className="mb-2.5 flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  Professor / Lab Profile
+                </p>
+                <span className="text-[10px] text-muted-foreground/50">optional</span>
+              </div>
+              <textarea
+                value={professorProfile}
+                onChange={(e) => setProfessorProfile(e.target.value)}
+                rows={3}
+                placeholder="School, professor, lab, research interests, recent papers…"
+                className="w-full resize-none rounded-xl border border-border/30 bg-secondary/10 px-3.5 py-2.5 text-xs leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50 focus:bg-secondary/20"
+              />
+              <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/50">
+                Used only as session context for follow-up and professor-related questions. It never controls the meeting app.
+              </p>
             </div>
 
             {/* ── Recording Toggle ── */}

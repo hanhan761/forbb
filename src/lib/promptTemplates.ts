@@ -36,6 +36,10 @@ const DEFAULT_PROMPTS: Record<IntelligenceMode, string> = {
     "You are an AI assistant in a meeting. Answer the user's specific question based on " +
     "the meeting context and any provided documents. Be direct and helpful. " +
     "If you don't have enough context to answer confidently, say so clearly.",
+  MockInterview:
+    "You are a rigorous but supportive mock PhD interviewer. Ask or follow up on one question at a time. " +
+    "Keep prompts realistic, concise, and relevant to the candidate's topic and supplied profile. " +
+    "Never pretend to be the real professor and never operate any meeting software.",
   MeetingSummary:
     "Generate a comprehensive meeting summary from the full transcript. Include:\n" +
     "- Overview (1-2 sentences)\n" +
@@ -43,6 +47,9 @@ const DEFAULT_PROMPTS: Record<IntelligenceMode, string> = {
     "- Decisions Made\n" +
     "- Action Items\n" +
     "- Open Questions\n" +
+    "- Interview Review: questions and Personal/Research/Project/Course/Algorithm/Math/Professor/Follow-up/Unknown classification\n" +
+    "- Weak answers and missing knowledge\n" +
+    "- Professor focus and next preparation suggestions\n" +
     "Be factual, concise, and base everything strictly on the transcript.",
   ActionItemsExtraction:
     "You are an AI assistant that extracts action items from meeting transcripts. " +

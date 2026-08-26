@@ -58,7 +58,14 @@ export function useStreamBuffer() {
         startStream(
           event.mode as IntelligenceMode,
           event.model,
-          event.provider
+          event.provider,
+          {
+            route: event.route ?? "auto",
+            question_type: event.question_type ?? "unknown",
+            answer_source: event.answer_source ?? "codex",
+            confidence: event.confidence ?? "medium",
+            answer_length: event.answer_length ?? "normal",
+          }
         );
       })
     );

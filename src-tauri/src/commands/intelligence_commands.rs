@@ -2,6 +2,7 @@ use tauri::{command, AppHandle, Emitter, State};
 
 use crate::intelligence::action_config::{AllActionConfigs, InstructionPresets};
 use crate::intelligence::IntelligenceEngine;
+use crate::intelligence::query_router::{self, QueryRoute};
 use crate::llm::provider::GenerationParams;
 use crate::llm::provider::RagChunkInfo;
 use crate::rag;
@@ -112,6 +113,9 @@ fn count_total_segments(segments_json: &str) -> usize {
 pub async fn generate_assist(
     mode: String,
     custom_question: Option<String>,
+    route: Option<String>,
+    answer_length: Option<String>,
+    glossary: Option<Vec<String>>,
     transcript_segments: Option<String>,
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -202,8 +206,12 @@ pub async fn generate_assist(
 
     // Prepend speaker context from active scenario (if set) before transcript
     if let Ok(scenario) = state.active_scenario.read() {
-        if !scenario.speaker_context.is_empty() && !transcript_text.is_empty() {
-            transcript_text = format!("{}\n\n{}", scenario.speaker_context, transcript_text);
+        if !scenario.speaker_context.is_empty() {
+            transcript_text = if transcript_text.is_empty() {
+                scenario.speaker_context.clone()
+            } else {
+                format!("{}\n\n{}", scenario.speaker_context, transcript_text)
+            };
         }
     }
 
@@ -214,6 +222,30 @@ pub async fn generate_assist(
         .filter(|l| l.starts_with("["))
         .count();
 
+    // Resolve the source before building context. This is intentionally a
+    // deterministic, local decision so a generic interview question stays on
+    // the low-latency path while personal/project questions use the local
+    // knowledge base and time-sensitive questions can use provider web search.
+    let routing_text = custom_question
+        .as_deref()
+        .filter(|q| !q.trim().is_empty())
+        .map(str::to_string)
+        .or_else(|| effective_question.as_ref().map(|q| q.text.clone()))
+        .unwrap_or_else(|| {
+            transcript_text
+                .chars()
+                .rev()
+                .take(800)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect()
+        });
+    let route_decision = query_router::resolve_route(route.as_deref(), &mode, &routing_text);
+    let resolved_route = route_decision.route;
+    let mut answer_source = route_decision.answer_source.clone();
+    let mut confidence = route_decision.confidence.clone();
+
     // Resolve per-action settings
     // Read default top-K from RagConfig (Context Strategy) — single source of truth
     let rag_default_top_k = state.rag.as_ref()
@@ -222,10 +254,31 @@ pub async fn generate_assist(
         .unwrap_or(5);
     let rag_top_k = action_cfg.as_ref().and_then(|c| c.rag_top_k).unwrap_or(rag_default_top_k);
 
-    let include_rag = action_cfg.as_ref().map(|c| c.include_rag_chunks).unwrap_or(true);
+    // Query routing owns source selection. The per-action RAG toggle remains
+    // useful for legacy/custom actions, but explicit route selection always
+    // wins so the user can force local-file retrieval when needed.
+    let include_rag = match resolved_route {
+        QueryRoute::SearchFiles => true,
+        _ => false,
+    };
     let include_transcript = action_cfg.as_ref().map(|c| c.include_transcript).unwrap_or(true);
     // include_question already computed above
     let include_instructions = action_cfg.as_ref().map(|c| c.include_custom_instructions).unwrap_or(true);
+
+    let answer_length = match answer_length.as_deref() {
+        Some("short") => "short".to_string(),
+        Some("detailed") => "detailed".to_string(),
+        _ => "normal".to_string(),
+    };
+
+    // Hot Context is kept small and resident in every interview prompt. The
+    // larger paper/notes corpus is only searched when the router selects files.
+    let hot_context = state
+        .context
+        .as_ref()
+        .and_then(|context| context.lock().ok())
+        .map(|context| context.get_hot_context(12_000, include_instructions))
+        .unwrap_or_default();
 
     // Resolve base system prompt: per-action config > active scenario > hardcoded template.
     // Active scenario is set by the frontend at meeting start based on the selected AI scenario.
@@ -233,9 +286,16 @@ pub async fn generate_assist(
         .as_ref()
         .map(|c| c.system_prompt.clone())
         .unwrap_or_else(|| {
-            // Check if the active scenario has a system prompt set
+            // Check if the active scenario has a prompt set. Summary turns
+            // use the scenario's dedicated review prompt; live turns use its
+            // response-coaching prompt.
             let scenario_prompt = state.active_scenario.read().ok().and_then(|s| {
-                if s.system_prompt.is_empty() { None } else { Some(s.system_prompt.clone()) }
+                let candidate = if mode == "MeetingSummary" {
+                    &s.summary_prompt
+                } else {
+                    &s.system_prompt
+                };
+                if candidate.is_empty() { None } else { Some(candidate.clone()) }
             });
             scenario_prompt.unwrap_or_else(|| {
                 crate::intelligence::prompt_templates::get_system_prompt(&mode).to_string()
@@ -249,6 +309,33 @@ pub async fn generate_assist(
     } else {
         base_system_prompt
     };
+
+    let glossary_terms = glossary
+        .unwrap_or_default()
+        .into_iter()
+        .map(|term| term.trim().to_string())
+        .filter(|term| !term.is_empty())
+        .take(100)
+        .collect::<Vec<_>>();
+    let glossary_instruction = if glossary_terms.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\nTerminology guardrail: preserve the exact spelling and casing of these project, paper, professor, lab, and technical terms when relevant: {}. Do not invent alternative names or translate proper nouns unless the user explicitly asks.",
+            glossary_terms.join(", ")
+        )
+    };
+
+    let system_prompt = format!(
+        "{}\n\nAnswer length: {}. Keep the English answer natural and speakable; do not add unsupported personal details.{}",
+        system_prompt,
+        match answer_length.as_str() {
+            "short" => "Short (15–30 seconds)",
+            "detailed" => "Detailed (1–2 minutes)",
+            _ => "Normal (30–60 seconds)",
+        },
+        glossary_instruction,
+    );
 
     // Build generation params from per-action overrides or global defaults
     let temperature = action_cfg
@@ -274,7 +361,7 @@ pub async fn generate_assist(
         }
     };
 
-    let enable_web_search = action_cfg.as_ref().map(|c| c.web_search).unwrap_or(false);
+    let enable_web_search = resolved_route == QueryRoute::SearchWeb;
 
     let params = GenerationParams {
         temperature: Some(temperature),
@@ -291,6 +378,10 @@ pub async fn generate_assist(
 
     let context_text = {
         let mut parts: Vec<String> = Vec::new();
+
+        if !hot_context.is_empty() {
+            parts.push(format!("## Hot Context\n{}", hot_context));
+        }
 
         // When Gemini cache is active, skip RAG entirely — no Ollama embed needed.
         // The full context is already cached on Gemini servers.
@@ -358,6 +449,11 @@ pub async fn generate_assist(
                             }
                         }
 
+                        // Keep the pre-dedup count for diagnostics. It tells
+                        // the call log how many candidates the local index
+                        // actually returned, rather than reporting top-K.
+                        rag_total_candidates = all_chunks.len();
+
                         // Deduplicate: keep highest normalized_score per chunk_id
                         let mut best: std::collections::HashMap<String, rag::search::ScoredChunk> = std::collections::HashMap::new();
                         for chunk in all_chunks {
@@ -380,16 +476,34 @@ pub async fn generate_assist(
                                 raw_score: c.score,
                             });
                         }
-                        rag_total_candidates = rag_top_k;
-                        if merged.len() < rag_top_k {
-                            rag_chunks_filtered = rag_top_k - merged.len();
-                        }
+                        rag_chunks_filtered = rag_total_candidates.saturating_sub(merged.len());
                         if !merged.is_empty() {
                             parts.push(rag::prompt_builder::build_rag_context(&merged, ""));
+                        }
+
+                        if merged.is_empty() {
+                            if hot_context.is_empty() {
+                                answer_source = "not_found".to_string();
+                                confidence = "unknown".to_string();
+                            } else {
+                                answer_source = "hot_context".to_string();
+                                confidence = "high".to_string();
+                            }
+                        } else {
+                            answer_source = "local_rag".to_string();
+                            confidence = "high".to_string();
                         }
                     }
                 }
             }
+        }
+
+        if resolved_route == QueryRoute::SearchFiles && active_cache_name.is_some() {
+            answer_source = "hot_context".to_string();
+            confidence = "high".to_string();
+        } else if resolved_route == QueryRoute::SearchFiles && hot_context.is_empty() && parts.is_empty() {
+            answer_source = "not_found".to_string();
+            confidence = "unknown".to_string();
         }
 
         parts.join("\n\n")
@@ -443,6 +557,11 @@ pub async fn generate_assist(
         provider_name,
         params,
         temperature,
+        answer_length,
+        resolved_route.as_str().to_string(),
+        route_decision.question_type.as_str().to_string(),
+        answer_source,
+        confidence,
         rag_query_text,
         rag_chunk_infos,
         rag_chunks_filtered,

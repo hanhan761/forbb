@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { LogEntry, LogEntryStatus, LogFilterKind } from "../lib/types";
+import type { LogEntry, LogEntryStatus, LogFilterKind, StreamSource } from "../lib/types";
 import { stripThinkTags } from "../lib/utils";
 
 const MAX_ENTRIES = 100;
@@ -13,6 +13,7 @@ interface CallLogState {
   // Lifecycle actions (called by useCallLogCapture)
   beginEntry: (entry: LogEntry) => void;
   appendToken: (id: string, token: string) => void;
+  setSources: (id: string, sources: StreamSource[]) => void;
   completeEntry: (id: string, totalTokens: number, latencyMs: number) => void;
   failEntry: (id: string, message: string) => void;
 
@@ -48,6 +49,13 @@ export const useCallLogStore = create<CallLogState>((set, get) => ({
           firstTokenAt: e.firstTokenAt ?? Date.now(),
         };
       }),
+    })),
+
+  setSources: (id, sources) =>
+    set((state) => ({
+      entries: state.entries.map((entry) =>
+        entry.id === id ? { ...entry, sources } : entry
+      ),
     })),
 
   completeEntry: (id, totalTokens, latencyMs) =>

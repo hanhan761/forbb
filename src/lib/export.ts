@@ -5,6 +5,7 @@
 import type { Meeting, TranscriptSegment, AIScenario, SpeakerIdentity } from "./types";
 import { formatTimestamp, formatDurationLong, getSpeakerLabel, getModeLabel } from "./utils";
 import { showToast } from "../stores/toastStore";
+import { writeObsidianReview } from "./ipc";
 
 /** Strip LLM thinking tags from text (Qwen3, DeepSeek, etc.) */
 function stripThinkTags(text: string): string {
@@ -45,7 +46,11 @@ function segmentTime(seg: TranscriptSegment, startMs: number): string {
 }
 
 function safeFilename(title: string): string {
-  return title.replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "meeting";
+  return title.replace(/[<>:\"/\\|?*\x00-\x1F]/g, "_").trim() || "meeting";
+}
+
+function yamlQuote(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ")}"`;
 }
 
 // ── Export: Markdown ──────────────────────────────────────────────────────────
@@ -90,15 +95,28 @@ export function exportToMarkdown(meeting: Meeting): string {
 
   if (meeting.transcript.length > 0) {
     md += `## Transcript\n\n`;
+    const translationMap = new Map(
+      (meeting.translations ?? [])
+        .filter((translation) => translation.segment_id)
+        .map((translation) => [translation.segment_id!, translation])
+    );
     for (const seg of meeting.transcript) {
       md += `**[${segmentTime(seg, startMs)}] ${resolveSpeaker(seg, speakerMap)}:** ${seg.text}\n\n`;
+      const translation = seg.id ? translationMap.get(seg.id) : undefined;
+      if (translation?.translated_text) {
+        md += `> ${translation.translated_text}\n\n`;
+      }
     }
   }
 
   if (meeting.ai_interactions.length > 0) {
     md += `## AI Interactions\n\n`;
     for (const ai of meeting.ai_interactions) {
-      md += `### ${getModeLabel(ai.mode)} (${ai.provider}/${ai.model})\n\n${ai.response}\n\n---\n\n`;
+      md += `### ${getModeLabel(ai.mode)} (${ai.provider}/${ai.model})\n\n${ai.response}\n\n`;
+      if (ai.sources && ai.sources.length > 0) {
+        md += `Sources: ${ai.sources.map((source) => `[${source.title}](${source.url})`).join(", ")}\n\n`;
+      }
+      md += `---\n\n`;
     }
   }
 
@@ -154,6 +172,7 @@ export function exportToJSON(meeting: Meeting): string {
     ai_scenario: meeting.ai_scenario,
     summary: meeting.summary ? stripThinkTags(meeting.summary) : meeting.summary,
     transcript: meeting.transcript,
+    translations: meeting.translations ?? [],
     ai_interactions: meeting.ai_interactions,
     speakers: meeting.speakers,
     action_items: meeting.action_items,
@@ -339,6 +358,58 @@ export async function exportMeetingAsJSON(meeting: Meeting): Promise<boolean> {
     filterLabel: "JSON",
     content: exportToJSON(meeting),
   });
+}
+
+/**
+ * Write a meeting review into a user-selected Obsidian folder. The Rust
+ * command creates `Interview Assistant/<profile>/<date>/` and performs the
+ * actual write outside the webview sandbox.
+ */
+export async function exportMeetingToObsidian(meeting: Meeting): Promise<boolean> {
+  try {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose an Obsidian Vault or output folder",
+    });
+    if (!selected || Array.isArray(selected)) return false;
+
+    const { useConfigStore } = await import("../stores/configStore");
+    const storedProfile = useConfigStore.getState().rememberedMeetingSetup?.professorProfile?.trim();
+    const meetingProfile = meeting.config_snapshot?.professor_profile?.trim();
+    const professorProfile = storedProfile || meetingProfile || "";
+    const meetingDate = new Date(meeting.start_time).toISOString().slice(0, 10);
+    const frontmatter = [
+      "---",
+      "type: interview-review",
+      `title: ${yamlQuote(meeting.title)}`,
+      `date: ${yamlQuote(meetingDate)}`,
+      `scenario: ${yamlQuote(meeting.ai_scenario ?? "interview")}`,
+      `audio_mode: ${yamlQuote(meeting.audio_mode ?? "online")}`,
+      `professor_profile: ${yamlQuote(professorProfile)}`,
+      `transcript_segments: ${meeting.transcript.length}`,
+      `ai_interactions: ${meeting.ai_interactions.length}`,
+      "tags:",
+      "  - interview",
+      "  - interview-review",
+      "---",
+      "",
+    ].join("\n");
+    const path = await writeObsidianReview({
+      directory: selected,
+      title: meeting.title,
+      meetingDate,
+      professorProfile,
+      content: `${frontmatter}${exportToMarkdown(meeting)}`,
+    });
+    showToast(`Saved Obsidian review: ${path}`, "success");
+    return true;
+  } catch (err) {
+    console.error("[Export] Failed to write Obsidian review:", err);
+    showToast("Obsidian write-back failed", "error");
+    return false;
+  }
 }
 
 export async function exportMeetingScenario(meeting: Meeting): Promise<boolean> {

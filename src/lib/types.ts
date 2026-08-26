@@ -25,6 +25,16 @@ export interface AudioDeviceList {
   outputs: AudioDevice[];
 }
 
+export type PrepareCheckStatus = "ready" | "warning" | "error" | "skipped";
+
+export interface PrepareCheck {
+  id: string;
+  label: string;
+  status: PrepareCheckStatus;
+  detail: string;
+  required: boolean;
+}
+
 export interface AudioLevel {
   source: AudioSource;
   level: number;
@@ -64,6 +74,8 @@ export interface Meeting {
   end_time: string | null;
   duration_seconds: number | null;
   transcript: TranscriptSegment[];
+  /** Cached post-meeting translations, when the review screen has loaded them. */
+  translations?: TranslationResult[];
   ai_interactions: AIInteraction[];
   summary: string | null;
   config_snapshot: MeetingConfig | null;
@@ -96,6 +108,7 @@ export interface MeetingConfig {
   llm_provider: string;
   llm_model: string;
   recording_enabled: boolean;
+  professor_profile?: string;
 }
 
 export interface MeetingSummary {
@@ -184,7 +197,14 @@ export interface AIInteraction {
   model: string;
   provider: string;
   latency_ms: number;
+  ttft_ms?: number;
   timestamp: string;
+  route?: QueryRoute;
+  question_type?: QuestionType;
+  answer_source?: string;
+  confidence?: string;
+  answer_length?: AnswerLength;
+  sources?: StreamSource[];
 }
 
 export type IntelligenceMode =
@@ -196,7 +216,38 @@ export type IntelligenceMode =
   | "AskQuestion"
   | "MeetingSummary"
   | "ActionItemsExtraction"
-  | "BookmarkSuggestions";
+  | "BookmarkSuggestions"
+  | "MockInterview";
+
+/** Source-selection policy for a generated answer. */
+export type QueryRoute =
+  | "auto"
+  | "quick_answer"
+  | "search_files"
+  | "search_web"
+  | "ask_codex";
+
+export type AnswerLength = "short" | "normal" | "detailed";
+
+export type QuestionType =
+  | "personal"
+  | "project"
+  | "research"
+  | "course"
+  | "algorithm"
+  | "math"
+  | "professor"
+  | "latest"
+  | "follow_up"
+  | "unknown";
+
+export interface StreamAnswerMetadata {
+  route: QueryRoute;
+  question_type: QuestionType;
+  answer_source: string;
+  confidence: string;
+  answer_length: AnswerLength;
+}
 
 export interface StreamSource {
   title: string;
@@ -213,6 +264,11 @@ export interface AIResponse {
   provider: string;
   latency_ms: number;
   sources?: StreamSource[];
+  route?: QueryRoute;
+  question_type?: QuestionType;
+  answer_source?: string;
+  confidence?: string;
+  answer_length?: AnswerLength;
 }
 
 export interface ModelInfo {
@@ -261,6 +317,7 @@ export interface CompletionStats {
 // == LLM PROVIDER TYPES ==
 
 export type LLMProviderType =
+  | "codex"
   | "ollama"
   | "lm_studio"
   | "openai"
@@ -517,6 +574,11 @@ export interface StreamStartEvent {
   include_question: boolean;
   // Enriched metadata
   temperature: number;
+  answer_length?: AnswerLength;
+  route?: QueryRoute;
+  question_type?: QuestionType;
+  answer_source?: string;
+  confidence?: string;
   rag_query: string | null;
   rag_chunks: RagChunkInfo[];
   rag_chunks_filtered: number;
@@ -588,6 +650,13 @@ export interface LogEntry {
   transcriptWindowSeconds: number | null;
   transcriptSegmentsCount: number | null;
   transcriptSegmentsTotal: number | null;
+  // Source routing metadata
+  route?: QueryRoute;
+  questionType?: QuestionType;
+  answerSource?: string;
+  confidence?: string;
+  answerLength?: AnswerLength;
+  sources?: StreamSource[];
   // Legacy fields (kept for backward compat, empty for new entries)
   snapshotTranscript: string;
   snapshotContext: string;

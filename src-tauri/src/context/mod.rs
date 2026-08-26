@@ -290,6 +290,64 @@ impl ContextManager {
         parts.join("\n")
     }
 
+    /// Return a bounded, always-available context slice for live interview
+    /// turns. Files whose names suggest a CV/profile/project/research summary
+    /// are preferred; if none are named that way, the first loaded resource is
+    /// used as a conservative fallback. Full papers and notes remain in the
+    /// cold RAG index instead of bloating every prompt.
+    pub fn get_hot_context(&self, max_chars: usize, include_custom_instructions: bool) -> String {
+        if max_chars == 0 {
+            return String::new();
+        }
+
+        const HOT_TERMS: &[&str] = &[
+            "cv", "resume", "profile", "bio", "background", "motivation", "education",
+            "experience", "project", "research", "introduction", "professor", "advisor", "lab", "laboratory", "教授", "导师", "简历",
+            "背景", "经历", "动机", "教育", "项目", "研究", "个人介绍",
+        ];
+
+        let is_hot = |resource: &&ContextResource| {
+            let name = resource.name.to_ascii_lowercase();
+            HOT_TERMS.iter().any(|term| name.contains(term))
+        };
+
+        let mut selected: Vec<&ContextResource> = self.resources.iter().filter(is_hot).collect();
+        if selected.is_empty() {
+            if let Some(first) = self.resources.first() {
+                selected.push(first);
+            }
+        }
+
+        let mut sections = Vec::new();
+        if include_custom_instructions && !self.custom_instructions.is_empty() {
+            sections.push(format!(
+                "## Interview Instructions\n{}",
+                self.custom_instructions
+            ));
+        }
+
+        let mut used_chars = sections.iter().map(|section| section.chars().count()).sum::<usize>();
+        for resource in selected {
+            let Some(cached) = self.cache.get(&resource.id) else {
+                continue;
+            };
+            if cached.text.is_empty() || used_chars >= max_chars {
+                continue;
+            }
+
+            let header = format!("## {} ({})\n", resource.name, resource.file_type);
+            let remaining = max_chars.saturating_sub(used_chars + header.chars().count());
+            if remaining == 0 {
+                break;
+            }
+            let body: String = cached.text.chars().take(remaining).collect();
+            sections.push(format!("{}{}", header, body));
+            used_chars += header.chars().count() + body.chars().count();
+        }
+
+        sections.join("\n\n")
+    }
+
     /// Set custom instructions text.
     pub fn set_custom_instructions(&mut self, text: &str) {
         self.custom_instructions = text.to_string();

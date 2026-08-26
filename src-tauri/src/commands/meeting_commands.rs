@@ -582,6 +582,54 @@ pub async fn update_meeting_mode(
 }
 
 #[command]
+pub async fn update_meeting_profile(
+    meeting_id: String,
+    professor_profile: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| "Database not initialized".to_string())?;
+
+    let db = db
+        .lock()
+        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let meeting = meetings::get_meeting(db.connection(), &meeting_id)
+        .map_err(|e| format!("Failed to load meeting profile: {}", e))?;
+    let mut snapshot = meeting
+        .config_snapshot
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    if let Some(object) = snapshot.as_object_mut() {
+        if professor_profile.trim().is_empty() {
+            object.remove("professor_profile");
+        } else {
+            object.insert(
+                "professor_profile".to_string(),
+                serde_json::Value::String(professor_profile),
+            );
+        }
+    }
+
+    let update = MeetingUpdate {
+        title: None,
+        end_time: None,
+        duration_seconds: None,
+        transcript: None,
+        ai_interactions: None,
+        summary: None,
+        config_snapshot: Some(snapshot),
+        recording_path: None,
+        recording_size: None,
+        waveform_path: None,
+        recording_offset_ms: None,
+    };
+    meetings::update_meeting(db.connection(), &meeting_id, &update)
+        .map_err(|e| format!("Failed to save meeting profile: {}", e))
+}
+
+#[command]
 pub async fn rename_speaker(
     meeting_id: String,
     speaker_id: String,

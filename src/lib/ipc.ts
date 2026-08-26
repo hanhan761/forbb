@@ -31,6 +31,9 @@ import type {
   OpusMtModelStatus,
   TrayState,
   UpdateInfo,
+  QueryRoute,
+  PrepareCheck,
+  AnswerLength,
 } from "./types";
 
 // == IPC: Audio (Sub-PRD 3) ==
@@ -71,6 +74,22 @@ export async function startAudioTest(
 
 export async function stopAudioTest(): Promise<boolean> {
   return invoke("stop_audio_test");
+}
+
+export async function prepareInterview(options: {
+  micDeviceId?: string;
+  systemDeviceId?: string;
+  audioMode?: string;
+  sttProviders?: string[];
+  professorProfile?: string;
+}): Promise<PrepareCheck[]> {
+  return invoke<PrepareCheck[]>("prepare_interview", {
+    micDeviceId: options.micDeviceId,
+    systemDeviceId: options.systemDeviceId,
+    audioMode: options.audioMode,
+    sttProviders: options.sttProviders,
+    professorProfile: options.professorProfile,
+  });
 }
 
 export async function ensureIpolicyOverride(): Promise<IpolicyStatus> {
@@ -174,6 +193,11 @@ export async function testLLMConnection(provider: string): Promise<boolean> {
   return invoke("test_llm_connection", { provider });
 }
 
+/** Drop the provider-local persistent thread before a new interview session. */
+export async function resetLLMSession(): Promise<void> {
+  return invoke("reset_llm_session");
+}
+
 export async function getLLMProviders(): Promise<string[]> {
   const result = await invoke<string>("get_llm_providers");
   return JSON.parse(result);
@@ -190,7 +214,12 @@ export async function listOpenRouterModels(
 
 // == IPC: Intelligence (Sub-PRD 6) ==
 
-export async function generateAssist(mode: string, customQuestion?: string): Promise<void> {
+export async function generateAssist(
+  mode: string,
+  customQuestion?: string,
+  route?: QueryRoute,
+  answerLength?: AnswerLength
+): Promise<void> {
   // Universal transcript: gather all final segments from the frontend store
   // (the single source of truth — every STT engine feeds into it).
   // The backend applies the per-action transcript window setting.
@@ -199,9 +228,18 @@ export async function generateAssist(mode: string, customQuestion?: string): Pro
     .filter(s => s.is_final)
     .map(s => ({ text: s.text, speaker: s.speaker, timestamp_ms: s.timestamp_ms }));
 
+  // Reuse the STT terminology dictionary for answer generation too. This
+  // keeps project names and technical terms stable across recognition and the
+  // oral answer, even when the active LLM is not the STT provider.
+  const { useConfigStore } = await import("../stores/configStore");
+  const glossary = useConfigStore.getState().deepgramConfig.keyterms;
+
   return invoke("generate_assist", {
     mode,
     customQuestion,
+    route,
+    answerLength,
+    glossary,
     transcriptSegments: JSON.stringify(segments),
   });
 }
@@ -252,6 +290,28 @@ export async function importObsidianVault(
 ): Promise<ObsidianVaultImportResult> {
   const result = await invoke<string>("import_obsidian_vault", { vaultPath });
   return JSON.parse(result);
+}
+
+export async function writeObsidianReview(options: {
+  directory: string;
+  title: string;
+  meetingDate: string;
+  professorProfile?: string;
+  content: string;
+}): Promise<string> {
+  const result = await invoke<string>("write_obsidian_review", {
+    directory: options.directory,
+    title: options.title,
+    meetingDate: options.meetingDate,
+    professorProfile: options.professorProfile,
+    content: options.content,
+  });
+  try {
+    const parsed = JSON.parse(result) as { path?: string };
+    return parsed.path ?? result;
+  } catch {
+    return result;
+  }
 }
 
 export async function removeContextFile(resourceId: string): Promise<void> {
@@ -354,6 +414,13 @@ export async function renameMeeting(meetingId: string, newTitle: string): Promis
 
 export async function updateMeetingSummary(meetingId: string, summary: string): Promise<void> {
   return invoke("update_meeting_summary", { meetingId, summary });
+}
+
+export async function updateMeetingProfile(
+  meetingId: string,
+  professorProfile: string,
+): Promise<void> {
+  return invoke("update_meeting_profile", { meetingId, professorProfile });
 }
 
 // == IPC: In-Person Meeting Mode ==

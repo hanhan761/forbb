@@ -137,7 +137,11 @@ interface ConfigState {
   contextStrategy: ContextStrategy;
 
   // In-person meeting mode settings
-  rememberedMeetingSetup: { audioMode: AudioMode; scenario: AIScenario } | null;
+  rememberedMeetingSetup: {
+    audioMode: AudioMode;
+    scenario: AIScenario;
+    professorProfile?: string;
+  } | null;
   diarizationEnabled: boolean;
   noisePreset: string | null;
   confidenceThreshold: number;
@@ -209,7 +213,11 @@ interface ConfigState {
   setFirstRunCompleted: (completed: boolean) => void;
   setHotkeys: (hotkeys: HotkeyConfig) => void;
   setVerifiedCloudProviders: (providers: string[]) => void;
-  setRememberedMeetingSetup: (setup: { audioMode: AudioMode; scenario: AIScenario } | null) => void;
+  setRememberedMeetingSetup: (setup: {
+    audioMode: AudioMode;
+    scenario: AIScenario;
+    professorProfile?: string;
+  } | null) => void;
   setDiarizationEnabled: (enabled: boolean) => void;
   setNoisePreset: (preset: string | null) => void;
   setConfidenceThreshold: (threshold: number) => void;
@@ -242,8 +250,8 @@ export const useConfigStore = create<ConfigState>((set) => ({
   theme: "dark",
   sttProvider: "windows_native",
   sttLanguage: "en-US",
-  llmProvider: "ollama",
-  llmModel: "",
+  llmProvider: "codex",
+  llmModel: "codex-default",
   micDeviceId: null,
   systemDeviceId: null,
   recordingEnabled: false,
@@ -668,7 +676,11 @@ export const useConfigStore = create<ConfigState>((set) => ({
       const groqConfig = await store.get<GroqConfig>("groqConfig");
       const pauseThresholdMs = await store.get<number>("pauseThresholdMs");
       const activeModelPerEngine = await store.get<Record<string, string>>("activeModelPerEngine");
-      const rememberedMeetingSetup = await store.get<{ audioMode: AudioMode; scenario: AIScenario } | null>("rememberedMeetingSetup");
+      const rememberedMeetingSetup = await store.get<{
+        audioMode: AudioMode;
+        scenario: AIScenario;
+        professorProfile?: string;
+      } | null>("rememberedMeetingSetup");
       const diarizationEnabled = await store.get<boolean>("diarizationEnabled");
       const noisePreset = await store.get<string | null>("noisePreset");
       const confidenceThreshold = await store.get<number>("confidenceThreshold");
@@ -933,8 +945,8 @@ export const useConfigStore = create<ConfigState>((set) => ({
 
       // Sync persisted LLM provider + model to Rust backend on startup.
       // The Rust side starts with Ollama as default; this pushes the user's saved provider.
-      const loadedLLMProvider = llmProvider ?? "ollama";
-      const loadedLLMModel = llmModel ?? "";
+      const loadedLLMProvider = llmProvider ?? "codex";
+      const loadedLLMModel = llmModel ?? (loadedLLMProvider === "codex" ? "codex-default" : "");
       if (loadedLLMProvider) {
         import("../lib/ipc").then(async ({ setLLMProvider: ipcSetLLM, setActiveModel: ipcSetModel, getApiKey: ipcGetKey }) => {
           try {

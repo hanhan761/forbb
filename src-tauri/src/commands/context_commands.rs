@@ -20,6 +20,39 @@ struct ObsidianVaultImportResult {
     skipped: Vec<ObsidianSkippedFile>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ObsidianReviewWriteResult {
+    path: String,
+}
+
+fn safe_path_component(value: &str, fallback: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|character| match character {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            character if character.is_control() => '_',
+            character => character,
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.chars().take(80).collect()
+    }
+}
+
+fn profile_folder_name(profile: Option<&str>) -> String {
+    let first_line = profile
+        .unwrap_or("")
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("");
+    safe_path_component(first_line, "Unassigned Profile")
+}
+
 /// Collect Markdown notes from an Obsidian Vault without traversing hidden
 /// configuration directories such as `.obsidian` or `.trash`.
 fn collect_markdown_files(root: &Path) -> Result<Vec<PathBuf>, String> {
@@ -138,6 +171,43 @@ pub async fn import_obsidian_vault(
         skipped,
     })
     .map_err(|e| format!("Failed to serialize Obsidian import result: {}", e))
+}
+
+/// Write a completed interview review into a user-selected Obsidian folder.
+/// The file is written locally by Rust so the selected Vault path does not
+/// need to be inside the app data directory or exposed to the webview.
+#[command]
+pub async fn write_obsidian_review(
+    directory: String,
+    title: String,
+    meeting_date: String,
+    professor_profile: Option<String>,
+    content: String,
+) -> Result<String, String> {
+    let base = PathBuf::from(&directory);
+    if !base.is_dir() {
+        return Err(format!("Obsidian output folder not found: {}", directory));
+    }
+
+    let date = safe_path_component(&meeting_date, "undated");
+    let profile = profile_folder_name(professor_profile.as_deref());
+    let output_dir = base.join("Interview Assistant").join(profile).join(date);
+    fs::create_dir_all(&output_dir)
+        .map_err(|error| format!("Failed to create Obsidian review folder: {}", error))?;
+
+    let base_filename = safe_path_component(&title, "interview");
+    let mut output_path = output_dir.join(format!("{}.md", base_filename));
+    if output_path.exists() {
+        let suffix = chrono::Utc::now().format("%H%M%S");
+        output_path = output_dir.join(format!("{}-{}.md", base_filename, suffix));
+    }
+    fs::write(&output_path, content)
+        .map_err(|error| format!("Failed to write Obsidian review: {}", error))?;
+
+    Ok(serde_json::to_string(&ObsidianReviewWriteResult {
+        path: output_path.to_string_lossy().into_owned(),
+    })
+    .unwrap_or_else(|_| output_path.to_string_lossy().into_owned()))
 }
 
 #[command]

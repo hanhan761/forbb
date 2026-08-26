@@ -25,6 +25,11 @@ export function AIResponsePanel() {
   const currentMode = useStreamStore((s) => s.currentMode);
   const error = useStreamStore((s) => s.error);
   const currentSources = useStreamStore((s) => s.currentSources);
+  const currentRoute = useStreamStore((s) => s.currentRoute);
+  const currentQuestionType = useStreamStore((s) => s.currentQuestionType);
+  const currentAnswerSource = useStreamStore((s) => s.currentAnswerSource);
+  const currentConfidence = useStreamStore((s) => s.currentConfidence);
+  const currentAnswerLength = useStreamStore((s) => s.currentAnswerLength);
   const responseHistory = useStreamStore((s) => s.responseHistory);
   const pinnedResponses = useStreamStore((s) => s.pinnedResponses);
   const pinResponse = useStreamStore((s) => s.pinResponse);
@@ -166,6 +171,13 @@ export function AIResponsePanel() {
                 {currentMode ? getModeLabel(currentMode) : "Generating"}...
               </span>
             </div>
+            <AnswerMeta
+              route={currentRoute}
+              questionType={currentQuestionType ?? undefined}
+              answerSource={currentAnswerSource ?? undefined}
+              confidence={currentConfidence ?? undefined}
+              answerLength={currentAnswerLength}
+            />
             <div className="prose prose-sm prose-invert max-w-none leading-relaxed" style={proseStyle}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {currentContent}
@@ -212,6 +224,13 @@ export function AIResponsePanel() {
                 </div>
               </div>
             )}
+            <AnswerMeta
+              route={currentRoute}
+              questionType={currentQuestionType ?? undefined}
+              answerSource={currentAnswerSource ?? undefined}
+              confidence={currentConfidence ?? undefined}
+              answerLength={currentAnswerLength}
+            />
             <div className="prose prose-sm prose-invert max-w-none leading-relaxed" style={proseStyle}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {currentContent}
@@ -251,6 +270,13 @@ export function AIResponsePanel() {
                   onClick={() => handlePin(displayResponse!.id)}
                 />
               </div>
+              <AnswerMeta
+                route={displayResponse.route}
+                questionType={displayResponse.question_type}
+                answerSource={displayResponse.answer_source}
+                confidence={displayResponse.confidence}
+                answerLength={displayResponse.answer_length}
+              />
             </div>
             <div className="prose prose-sm prose-invert max-w-none leading-relaxed" style={proseStyle}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -321,6 +347,62 @@ export function AIResponsePanel() {
 }
 
 // --- Sub-components ---
+
+function AnswerMeta({
+  route,
+  questionType,
+  answerSource,
+  confidence,
+  answerLength,
+}: {
+  route?: string;
+  questionType?: string;
+  answerSource?: string;
+  confidence?: string;
+  answerLength?: string;
+}) {
+  if (!route && !answerSource && !questionType && !answerLength) return null;
+
+  const sourceLabel: Record<string, string> = {
+    codex: "Codex knowledge",
+    local_rag: "My files",
+    hot_context: "Hot context",
+    web_search: "Web",
+    not_found: "No matching files",
+  };
+  const typeLabel: Record<string, string> = {
+    personal: "Personal",
+    project: "Project",
+    research: "Research",
+    course: "Course",
+    algorithm: "Algorithm",
+    math: "Math",
+    professor: "Professor",
+    latest: "Latest",
+    follow_up: "Follow-up",
+    unknown: "General",
+  };
+  const confidenceLabel: Record<string, string> = {
+    high: "High",
+    medium: "General",
+    web: "Web",
+    unknown: "Unverified",
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[0.6rem] text-muted-foreground/55" aria-label="Answer routing metadata">
+      {answerSource && (
+        <span className={`rounded-full px-2 py-0.5 ${answerSource === "not_found" ? "bg-warning/10 text-warning/80" : "bg-accent/30"}`}>
+          {sourceLabel[answerSource] ?? answerSource}
+        </span>
+      )}
+      {questionType && <span>{typeLabel[questionType] ?? questionType}</span>}
+      {confidence && <span>· {confidenceLabel[confidence] ?? confidence}</span>}
+      {answerLength && <span>· {answerLength}</span>}
+      {route && route !== "auto" && <span className="opacity-70">· {route.replaceAll("_", " ")}</span>}
+    </div>
+  );
+}
 
 function SourcesList({ sources }: { sources?: StreamSource[] }) {
   if (!sources || sources.length === 0) return null;

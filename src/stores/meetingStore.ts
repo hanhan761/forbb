@@ -8,6 +8,7 @@ import {
   startCapture,
   startCapturePerParty,
   stopCapture,
+  resetLLMSession,
 } from "../lib/ipc";
 import { useConfigStore } from "./configStore";
 import { useTranscriptStore } from "./transcriptStore";
@@ -63,7 +64,12 @@ interface MeetingState {
   setSelectedMeetingId: (id: string | null) => void;
 
   // Async flows
-  startMeetingFlow: (title?: string, audioMode?: AudioMode, scenario?: AIScenario) => Promise<void>;
+  startMeetingFlow: (
+    title?: string,
+    audioMode?: AudioMode,
+    scenario?: AIScenario,
+    professorProfile?: string,
+  ) => Promise<void>;
   endMeetingFlow: () => Promise<void>;
   loadRecentMeetings: () => Promise<void>;
 
@@ -118,20 +124,36 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
   },
   setSelectedMeetingId: (id) => set({ selectedMeetingId: id }),
 
-  startMeetingFlow: async (title?: string, audioMode?: AudioMode, scenario?: AIScenario) => {
+  startMeetingFlow: async (
+    title?: string,
+    audioMode?: AudioMode,
+    scenario?: AIScenario,
+    professorProfile?: string,
+  ) => {
     try {
       // Resolve mode and scenario (fall back to current state if not provided)
       const resolvedMode: AudioMode = audioMode ?? get().audioMode;
       const resolvedScenario: AIScenario = scenario ?? get().aiScenario;
+      const resolvedProfessorProfile =
+        professorProfile?.trim() ||
+        useConfigStore.getState().rememberedMeetingSetup?.professorProfile?.trim() ||
+        "";
 
       // 1. Create meeting record in SQLite
       const meeting = await ipcStartMeeting(title);
 
+      // Start each interview with a fresh provider-local thread. Stateless
+      // HTTP providers no-op; the local Codex provider drops its prior thread.
+      await resetLLMSession().catch((err) => {
+        console.warn("[meetingStore] Failed to reset LLM session:", err);
+      });
+
       // 1b. Store mode/scenario in state and persist to DB
       set({ audioMode: resolvedMode, aiScenario: resolvedScenario });
       try {
-        const { updateMeetingMode } = await import("../lib/ipc");
+        const { updateMeetingMode, updateMeetingProfile } = await import("../lib/ipc");
         await updateMeetingMode(meeting.id, resolvedMode, resolvedScenario);
+        await updateMeetingProfile(meeting.id, resolvedProfessorProfile);
       } catch { /* non-critical */ }
 
       // 1c. Initialize speaker store for the resolved mode
@@ -171,6 +193,12 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
           template.system_prompt,
           template.summary_prompt,
           template.question_detection_prompt
+        );
+        const { updateSpeakerContext } = await import("../lib/ipc");
+        await updateSpeakerContext(
+          resolvedProfessorProfile
+            ? `## Professor / Lab Profile\n${resolvedProfessorProfile}`
+            : ""
         );
       } catch { /* non-critical */ }
 
@@ -325,7 +353,14 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
               model: e.model,
               provider: e.provider,
               latency_ms: e.latencyMs ?? 0,
+              ttft_ms: e.firstTokenAt && e.startedAt ? e.firstTokenAt - e.startedAt : undefined,
               timestamp: new Date(e.timestamp).toISOString(),
+              route: e.route,
+              question_type: e.questionType,
+              answer_source: e.answerSource,
+              confidence: e.confidence,
+              answer_length: e.answerLength,
+              sources: e.sources,
             }));
           if (interactions.length > 0) {
             await saveMeetingAiInteractions(
@@ -460,6 +495,10 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
     } catch { /* non-critical */ }
 
     // 8. Clear active state
+    await resetLLMSession().catch((err) => {
+      console.warn("[meetingStore] Failed to reset LLM session after meeting:", err);
+    });
+
     set({
       activeMeeting: null,
       isRecording: false,

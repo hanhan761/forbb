@@ -388,6 +388,11 @@ pub async fn test_rag_answer(
         crate::llm::provider::GenerationParams::default(),
         // Metadata for StreamStartEvent (test-rag defaults)
         0.7,                        // temperature (default)
+        "normal".to_string(),       // answer_length
+        "search_files".to_string(), // route
+        "unknown".to_string(),       // question_type
+        "local_rag".to_string(),      // answer_source
+        "high".to_string(),           // confidence
         Some(query.clone()),        // rag_query
         Vec::new(),                 // rag_chunks (not tracked for test)
         0,                          // rag_chunks_filtered

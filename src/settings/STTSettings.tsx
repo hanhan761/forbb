@@ -1168,7 +1168,7 @@ function DeepgramAdvancedSettings() {
               <code className="text-meta text-muted-foreground/60">keyterm=TERM</code>
             </div>
             <p className="mb-2 text-meta text-muted-foreground/70">
-              Boost recognition of specific words or phrases (product names, jargon). Up to 100 keyterms.
+              Boost recognition and preserve spelling in AI answers for product names, jargon, papers, and labs. Up to 100 keyterms.
             </p>
             <div className="flex gap-2 mb-2">
               <input

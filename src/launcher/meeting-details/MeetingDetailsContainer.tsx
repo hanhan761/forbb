@@ -179,6 +179,7 @@ export function MeetingDetails({ meetingId, onBack }: MeetingDetailsProps) {
         }
       }
       setTranslations(map);
+      setMeeting((prev) => (prev ? { ...prev, translations: results } : prev));
     }).catch((err) => {
       console.error("[MeetingDetails] Failed to load translations:", err);
     });
@@ -192,6 +193,13 @@ export function MeetingDetails({ meetingId, onBack }: MeetingDetailsProps) {
           const next = new Map(prev);
           next.set(result.segment_id!, result);
           return next;
+        });
+        setMeeting((prev) => {
+          if (!prev) return prev;
+          const existing = (prev.translations ?? []).filter(
+            (item) => item.segment_id !== result.segment_id || item.target_lang !== result.target_lang
+          );
+          return { ...prev, translations: [result, ...existing] };
         });
         setTranslatingSegments((prev) => {
           const next = new Set(prev);

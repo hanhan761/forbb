@@ -34,6 +34,7 @@ const PROVIDER_DISPLAY: Record<
   LLMProviderType,
   { label: string; description: string; requiresKey: boolean; isLocal: boolean }
 > = {
+  codex: { label: "Codex (local)", description: "Local authenticated app-server session", requiresKey: false, isLocal: true },
   ollama: { label: "Ollama", description: "Local models via Ollama", requiresKey: false, isLocal: true },
   lm_studio: { label: "LM Studio", description: "Local models via LM Studio", requiresKey: false, isLocal: true },
   openai: { label: "OpenAI", description: "GPT-4o, GPT-4, etc.", requiresKey: true, isLocal: false },
@@ -45,7 +46,7 @@ const PROVIDER_DISPLAY: Record<
 };
 
 const ALL_PROVIDERS: LLMProviderType[] = [
-  "ollama", "lm_studio", "openai", "anthropic", "groq", "gemini", "openrouter", "custom",
+  "codex", "ollama", "lm_studio", "openai", "anthropic", "groq", "gemini", "openrouter", "custom",
 ];
 
 // Filter out known embedding-only models
@@ -440,7 +441,9 @@ export function LLMSettings() {
         <div className="flex items-center gap-3 rounded-xl border border-border/30 bg-accent/20 px-4 py-3">
           <Server className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-xs text-muted-foreground">
-            {selectedProvider === "ollama"
+            {selectedProvider === "codex"
+              ? "Uses your local Codex CLI login through app-server stdio"
+              : selectedProvider === "ollama"
               ? "Requires Ollama running on localhost:11434"
               : "Requires LM Studio running on localhost:1234"}
           </span>

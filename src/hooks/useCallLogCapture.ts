@@ -9,6 +9,7 @@ import {
   onStreamStart,
   onStreamToken,
   onStreamEnd,
+  onStreamSources,
   onStreamError,
 } from "../lib/events";
 import { useCallLogStore } from "../stores/callLogStore";
@@ -57,6 +58,11 @@ export function useCallLogCapture() {
           includeQuestion: event.include_question,
           // Enriched metadata
           temperature: event.temperature ?? null,
+          route: event.route ?? "auto",
+          questionType: event.question_type ?? "unknown",
+          answerSource: event.answer_source ?? "codex",
+          confidence: event.confidence ?? "medium",
+          answerLength: event.answer_length ?? "normal",
           ragQuery: event.rag_query ?? null,
           ragChunks: event.rag_chunks ?? [],
           ragChunksFiltered: event.rag_chunks_filtered ?? 0,
@@ -133,7 +139,14 @@ export function useCallLogCapture() {
                 model: e.model,
                 provider: e.provider,
                 latency_ms: e.latencyMs ?? 0,
+                ttft_ms: e.firstTokenAt && e.startedAt ? e.firstTokenAt - e.startedAt : undefined,
                 timestamp: new Date(e.timestamp).toISOString(),
+                route: e.route,
+                question_type: e.questionType,
+                answer_source: e.answerSource,
+                confidence: e.confidence,
+                answer_length: e.answerLength,
+                sources: e.sources,
               }));
             if (interactions.length > 0) {
               saveMeetingAiInteractions(
@@ -146,6 +159,16 @@ export function useCallLogCapture() {
           }
 
           activeCallId.current = null;
+        }
+      })
+    );
+
+    unlisteners.push(
+      onStreamSources((event) => {
+        if (activeCallId.current) {
+          useCallLogStore
+            .getState()
+            .setSources(activeCallId.current, event.sources);
         }
       })
     );

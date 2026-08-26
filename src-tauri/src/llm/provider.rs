@@ -100,6 +100,11 @@ pub struct StreamStartPayload {
     pub include_question: bool,
     // New fields for AI log enrichment
     pub temperature: f64,
+    pub answer_length: String,
+    pub route: String,
+    pub question_type: String,
+    pub answer_source: String,
+    pub confidence: String,
     pub rag_query: Option<String>,
     pub rag_chunks: Vec<RagChunkInfo>,
     pub rag_chunks_filtered: usize,
@@ -154,6 +159,13 @@ pub trait LLMProvider: Send + Sync {
 
     /// Tests whether the provider is reachable and properly configured
     async fn test_connection(&self) -> Result<bool, LLMError>;
+
+    /// Reset provider-local session state. HTTP providers are stateless; a
+    /// persistent provider such as Codex uses this to start a fresh interview
+    /// thread without affecting the rest of the app.
+    async fn reset_session(&self) -> Result<(), LLMError> {
+        Ok(())
+    }
 
     /// Streams a completion response, emitting tokens via Tauri events.
     /// Events: "llm_stream_start", "llm_stream_token", "llm_stream_end", "llm_stream_error"

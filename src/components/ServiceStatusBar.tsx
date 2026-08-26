@@ -10,6 +10,7 @@ import {
 import { useConfigStore } from "../stores/configStore";
 import { useStreamStore } from "../stores/streamStore";
 import { useMeetingStore } from "../stores/meetingStore";
+import { useTranslationStore } from "../stores/translationStore";
 import { useSpeakerStore } from "../stores/speakerStore";
 import { useAudioLevel } from "../hooks/useAudioLevel";
 import { hasApiKey, listLocalSTTEngines, setLLMProvider, setActiveModel, getApiKey } from "../lib/ipc";
@@ -18,6 +19,7 @@ import { showToast } from "../stores/toastStore";
 
 // ── Human-friendly provider labels ──
 const LLM_LABELS: Record<string, string> = {
+  codex: "Codex",
   ollama: "Ollama",
   lm_studio: "LM Studio",
   openai: "OpenAI",
@@ -85,6 +87,7 @@ const LLM_PROVIDER_OPTIONS: {
   requiresKey: boolean;
   isLocal: boolean;
 }[] = [
+  { value: "codex", label: "Codex (local)", IconComponent: Brain, requiresKey: false, isLocal: true },
   { value: "ollama", label: "Ollama", IconComponent: Monitor, requiresKey: false, isLocal: true },
   { value: "lm_studio", label: "LM Studio", IconComponent: Monitor, requiresKey: false, isLocal: true },
   { value: "openai", label: "OpenAI", IconComponent: Cloud, requiresKey: true, isLocal: false },
@@ -148,6 +151,10 @@ export function ServiceStatusBar({ compact = false }: { compact?: boolean }) {
   const latencyMs = useStreamStore((s) => s.latencyMs);
   const streamProvider = useStreamStore((s) => s.currentProvider);
   const streamModel = useStreamStore((s) => s.currentModel);
+  const currentRoute = useStreamStore((s) => s.currentRoute);
+  const currentAnswerSource = useStreamStore((s) => s.currentAnswerSource);
+  const translationProvider = useTranslationStore((s) => s.provider);
+  const autoTranslateEnabled = useTranslationStore((s) => s.autoTranslateEnabled);
   const { micLevel, systemLevel } = useAudioLevel();
 
   // Mute state (session-only, not persisted)
@@ -296,7 +303,7 @@ export function ServiceStatusBar({ compact = false }: { compact?: boolean }) {
                 model={youStt.model}
                 active={youActive}
                 color="sky"
-                label="You"
+                label="MIC"
                 muted={mutedYou}
                 interactive={isRecording}
                 pickerOpen={pickerOpen === "you"}
@@ -330,7 +337,7 @@ export function ServiceStatusBar({ compact = false }: { compact?: boolean }) {
                 model={themStt.model}
                 active={themActive}
                 color="amber"
-                label="Them"
+                label="SYSTEM"
                 muted={mutedThem}
                 interactive={isRecording}
                 pickerOpen={pickerOpen === "them"}
@@ -354,6 +361,33 @@ export function ServiceStatusBar({ compact = false }: { compact?: boolean }) {
           </div>
         </>
       )}
+
+      {/* Explicit service state required for a quick preflight read. */}
+      <Divider />
+      <ServiceChip
+        icon={<Globe className="h-3.5 w-3.5" />}
+        provider="TRANSLATE"
+        model={translationProvider}
+        active={isRecording && autoTranslateEnabled}
+        color="amber"
+        tooltip={`Translation: ${translationProvider}${autoTranslateEnabled ? " enabled" : " disabled"}`}
+      />
+      <ServiceChip
+        icon={<HardDrive className="h-3.5 w-3.5" />}
+        provider="RAG"
+        model={currentAnswerSource === "local_rag" || currentRoute === "search_files" ? "files" : "idle"}
+        active={currentAnswerSource === "local_rag" || currentRoute === "search_files"}
+        color="purple"
+        tooltip="Local file retrieval status"
+      />
+      <ServiceChip
+        icon={<Globe className="h-3.5 w-3.5" />}
+        provider="WEB"
+        model={currentAnswerSource === "web_search" || currentRoute === "search_web" ? "enabled" : "off"}
+        active={currentAnswerSource === "web_search" || currentRoute === "search_web"}
+        color="sky"
+        tooltip="Web search is only enabled for routed time-sensitive questions"
+      />
 
       {/* Latency / streaming indicator */}
       {(isStreaming || latencyMs != null) && (

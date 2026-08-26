@@ -3,7 +3,7 @@ import { useStreamStore } from "../stores/streamStore";
 import { useAIActionsStore } from "../stores/aiActionsStore";
 import { generateAssist, cancelGeneration } from "../lib/ipc";
 import { showToast } from "../stores/toastStore";
-import type { IntelligenceMode } from "../lib/types";
+import type { AnswerLength, IntelligenceMode, QueryRoute } from "../lib/types";
 import {
   Loader2,
   Sparkles,
@@ -46,6 +46,8 @@ export function ModeButtons() {
   const actions = useAIActionsStore((s) => s.configs.actions);
   const [askInputText, setAskInputText] = useState("");
   const [askInputVisible, setAskInputVisible] = useState(false);
+  const [queryRoute, setQueryRoute] = useState<QueryRoute>("auto");
+  const [answerLength, setAnswerLength] = useState<AnswerLength>("normal");
 
   // Listen for keyboard shortcut (Digit5) to toggle ask input
   useEffect(() => {
@@ -99,20 +101,20 @@ export function ModeButtons() {
         setAskInputVisible((v) => !v);
         return;
       }
-      generateAssist(mode).catch((err) => showToast(err instanceof Error ? err.message : "Couldn't generate AI response", "error"));
+      generateAssist(mode, undefined, queryRoute, answerLength).catch((err) => showToast(err instanceof Error ? err.message : "Couldn't generate AI response", "error"));
     },
-    [isStreaming, currentMode]
+    [isStreaming, currentMode, queryRoute, answerLength]
   );
 
   const handleAskSubmit = useCallback(() => {
     const text = askInputText.trim();
     if (!text || isStreaming) return;
-    generateAssist("AskQuestion", text).catch((err) =>
+    generateAssist("AskQuestion", text, queryRoute, answerLength).catch((err) =>
       showToast(err instanceof Error ? err.message : "Couldn't send question", "error")
     );
     setAskInputText("");
     setAskInputVisible(false);
-  }, [askInputText, isStreaming]);
+  }, [askInputText, isStreaming, queryRoute, answerLength]);
 
   return (
     <div className="flex flex-col gap-1">
@@ -142,6 +144,36 @@ export function ModeButtons() {
             </button>
           );
         })}
+        <label className="ml-auto flex items-center gap-1 rounded-lg border border-border/20 px-1.5 py-1 text-[0.6rem] text-muted-foreground/60" title="Choose where the assistant should look for an answer">
+          <span>Source</span>
+          <select
+            value={queryRoute}
+            onChange={(e) => setQueryRoute(e.target.value as QueryRoute)}
+            disabled={isStreaming}
+            aria-label="Answer source"
+            className="max-w-[6.5rem] cursor-pointer bg-transparent text-[0.6rem] text-foreground/70 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="auto">Auto</option>
+            <option value="quick_answer">Quick</option>
+            <option value="search_files">My files</option>
+            <option value="search_web">Web</option>
+            <option value="ask_codex">Codex</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1 rounded-lg border border-border/20 px-1.5 py-1 text-[0.6rem] text-muted-foreground/60" title="Choose answer length">
+          <span>Length</span>
+          <select
+            value={answerLength}
+            onChange={(e) => setAnswerLength(e.target.value as AnswerLength)}
+            disabled={isStreaming}
+            aria-label="Answer length"
+            className="max-w-[4.8rem] cursor-pointer bg-transparent text-[0.6rem] text-foreground/70 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="short">Short</option>
+            <option value="normal">Normal</option>
+            <option value="detailed">Detailed</option>
+          </select>
+        </label>
       </div>
 
       {/* Inline Ask input */}

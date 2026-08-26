@@ -50,10 +50,44 @@ export function AIInteractionLog({ interactions, expandedId, onToggle }: AIInter
                   <span>{interaction.provider}/{interaction.model}</span>
                   <span>&middot;</span>
                   <span>{formatRelativeTime(interaction.timestamp)}</span>
+                  {interaction.ttft_ms != null && (
+                    <>
+                      <span>&middot;</span>
+                      <span className="tabular-nums">TTFT {interaction.ttft_ms}ms</span>
+                    </>
+                  )}
+                  {interaction.answer_source && (
+                    <>
+                      <span>&middot;</span>
+                      <span className="text-info/70">{sourceLabel(interaction.answer_source)}</span>
+                    </>
+                  )}
+                  {interaction.confidence && (
+                    <span className="rounded bg-secondary/40 px-1.5 py-0.5 text-[10px]">
+                      {interaction.confidence}
+                    </span>
+                  )}
                 </div>
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
                   {interaction.response}
                 </p>
+                {interaction.sources && interaction.sources.length > 0 && (
+                  <div className="mt-3 border-t border-border/15 pt-2 text-xs text-muted-foreground/60">
+                    <span className="mr-1.5">Sources:</span>
+                    {interaction.sources.map((source, index) => (
+                      <a
+                        key={`${source.url}-${index}`}
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mr-2 inline-block max-w-[18rem] truncate align-bottom text-info/70 hover:text-info"
+                        title={source.url}
+                      >
+                        {source.title}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -61,4 +95,14 @@ export function AIInteractionLog({ interactions, expandedId, onToggle }: AIInter
       })}
     </div>
   );
+}
+
+function sourceLabel(source: string): string {
+  switch (source) {
+    case "local_rag": return "My files";
+    case "hot_context": return "Hot context";
+    case "web_search": return "Web";
+    case "not_found": return "No matching files";
+    default: return "Codex";
+  }
 }

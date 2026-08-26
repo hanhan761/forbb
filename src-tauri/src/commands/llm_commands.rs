@@ -138,6 +138,32 @@ pub async fn test_llm_connection(
 }
 
 #[command]
+pub async fn reset_llm_session(state: State<'_, AppState>) -> Result<(), String> {
+    let llm = state
+        .llm
+        .as_ref()
+        .ok_or_else(|| "LLM router not initialized".to_string())?;
+
+    // Clone the provider while holding the std mutex briefly, then await the
+    // provider-local reset without holding that mutex.
+    let provider = {
+        let guard = llm
+            .lock()
+            .map_err(|e| format!("Failed to lock LLM router: {}", e))?;
+        guard
+            .get_provider()
+            .map_err(|e| format!("No active LLM provider: {}", e))?
+    };
+
+    let result = provider
+        .lock()
+        .await
+        .reset_session()
+        .await;
+    result.map_err(|e| format!("Failed to reset LLM session: {}", e))
+}
+
+#[command]
 pub async fn get_llm_providers() -> Result<String, String> {
     let providers = LLMRouter::get_all_providers();
     serde_json::to_string(&providers)

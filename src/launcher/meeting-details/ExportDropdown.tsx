@@ -4,10 +4,11 @@ import {
   exportMeetingAsMarkdown,
   exportMeetingAsSRT,
   exportMeetingAsJSON,
+  exportMeetingToObsidian,
   exportMeetingScenario,
   getScenarioExportFormat,
 } from "../../lib/export";
-import { Download, FileText, Subtitles, Braces, ChevronDown, Loader2 } from "lucide-react";
+import { Download, FileText, Subtitles, Braces, BookOpen, ChevronDown, Loader2 } from "lucide-react";
 
 interface ExportDropdownProps {
   meeting: Meeting;
@@ -18,7 +19,7 @@ interface ExportOption {
   description: string;
   icon: React.ReactNode;
   action: () => Promise<boolean>;
-  variant?: "default" | "scenario";
+  variant?: "default" | "scenario" | "obsidian";
 }
 
 export function ExportDropdown({ meeting }: ExportDropdownProps) {
@@ -77,6 +78,13 @@ export function ExportDropdown({ meeting }: ExportDropdownProps) {
       icon: <Braces className="h-3.5 w-3.5" />,
       action: () => exportMeetingAsJSON(meeting),
     },
+    {
+      label: "Obsidian Review",
+      description: "Write review into a Vault folder",
+      icon: <BookOpen className="h-3.5 w-3.5" />,
+      action: () => exportMeetingToObsidian(meeting),
+      variant: "obsidian",
+    },
   ];
 
   const allOptions: ExportOption[] = scenarioFmt
@@ -130,7 +138,9 @@ export function ExportDropdown({ meeting }: ExportDropdownProps) {
           {allOptions.map((opt, i) => {
             const key = opt.label;
             const isScenario = opt.variant === "scenario";
-            const separator = isScenario && allOptions.length > 1;
+            const isObsidian = opt.variant === "obsidian";
+            const isSpecial = isScenario || isObsidian;
+            const separator = isSpecial && allOptions.length > 1;
 
             return (
               <div key={key}>
@@ -140,12 +150,14 @@ export function ExportDropdown({ meeting }: ExportDropdownProps) {
                   className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-secondary/40 cursor-pointer ${
                     isScenario
                       ? "text-primary/80 hover:text-primary"
+                      : isObsidian
+                        ? "text-info/80 hover:text-info"
                       : "text-foreground/70 hover:text-foreground"
                   }`}
                   role="menuitem"
                 >
                   <span
-                    className={`shrink-0 ${isScenario ? "text-primary/70" : "text-muted-foreground/50"}`}
+                    className={`shrink-0 ${isScenario ? "text-primary/70" : isObsidian ? "text-info/70" : "text-muted-foreground/50"}`}
                   >
                     {opt.icon}
                   </span>

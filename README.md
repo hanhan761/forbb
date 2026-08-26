@@ -32,18 +32,21 @@
 
 ### Why NexQ?
 
-🔒 **100% Local** — your audio and data never leave your machine
+🔒 **Local-first** — personal files, indexes, sessions, and recordings stay local; cloud services are opt-in
 
 🆓 **Free & Open Source** — no subscriptions, no limits, ever
 
-⚡ **10 STT + 8 LLM providers** — from local Whisper & Ollama to cloud Deepgram & OpenAI
+⚡ **10 STT + 9 LLM providers** — from local Whisper, Ollama, and Codex to cloud Deepgram & OpenAI
 
 ## Features
 
 - **Dual-party transcription** — captures mic ("You") and system audio ("Them") simultaneously
-- **Real-time AI copilot** — get streaming answers, follow-up suggestions, and meeting recaps from 8 LLM providers
+- **Real-time AI copilot** — get streaming, speakable answers and follow-up suggestions from local Codex or other LLM providers
 - **Local RAG pipeline** — index your own documents (PDF, DOCX, TXT, MD) for context-aware AI responses
 - **Obsidian Vault import** — bring a local Markdown Vault into the knowledge base without an Obsidian plugin
+- **Interview Query Router** — automatically choose direct Codex, local files, or web search and show source/confidence metadata
+- **Interview preparation + review** — check devices/services before starting, save bilingual transcripts, and write a dated review back to Obsidian
+- **Mock Interview** — text-only practice with follow-up questions and coaching across technical accuracy, English, structure, confidence, and profile consistency
 - **Gemini Context Cache** — upload documents to Gemini once, skip local embedding entirely for ~3-5s faster queries
 - **10 STT providers** — Web Speech API, Deepgram, Groq, Whisper, ONNX Runtime, and more
 - **Always-on-top overlay** — compact, transparent floating window visible only to you
@@ -56,8 +59,11 @@
 ## Quick Start
 
 1. **Download** the [latest release](https://github.com/VahidAlizadeh/NexQ/releases/latest)
-2. **Configure** your STT and LLM providers (or use free local models)
-3. **Start** any meeting — NexQ captures system audio automatically
+2. **Configure** your STT and LLM providers. If the local Codex CLI is installed and authenticated, NexQ can use its `codex app-server` session without another API key.
+3. **Prepare interview** to verify the selected microphone, system output, STT, translation, knowledge base, and answer model.
+4. **Start** a meeting — NexQ reads selected local audio and shows assistance in its overlay; it does not control, speak into, or type into the meeting app.
+
+For live interviews, follow the meeting platform, school, and local consent rules for recording and AI assistance.
 
 [Getting Started Guide](docs/user-guide/getting-started.md) | [All User Guides](docs/user-guide/)
 
@@ -114,7 +120,7 @@ Cache expires after your chosen TTL (30 min – 24 hours). Delete it early from 
 | Styling | Tailwind CSS 3.4, shadcn/ui |
 | Audio | cpal, WASAPI (Windows loopback) |
 | STT | whisper-rs, ONNX Runtime, Deepgram, Groq, Web Speech API |
-| LLM | OpenAI, Anthropic, Groq, Ollama, LM Studio, Gemini |
+| LLM | Local Codex app-server, OpenAI, Anthropic, Groq, Ollama, LM Studio, Gemini |
 | Database | SQLite (rusqlite) |
 
 ## Development
