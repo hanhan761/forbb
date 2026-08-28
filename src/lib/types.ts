@@ -333,6 +333,7 @@ export type LLMProviderType =
   | "ollama"
   | "lm_studio"
   | "openai"
+  | "qwen"
   | "anthropic"
   | "groq"
   | "gemini"

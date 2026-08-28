@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Brain, Mic, MicOff, Volume2, VolumeX, Zap, Cpu,
+  Brain, Mic, MicOff, Volume2, VolumeX, Zap, Cpu, Sparkles,
   ChevronUp, CheckCircle, Globe, Monitor, HardDrive, Cloud,
 } from "lucide-react";
 import { useConfigStore } from "../stores/configStore";
@@ -23,6 +23,7 @@ const LLM_LABELS: Record<string, string> = {
   ollama: "Ollama",
   lm_studio: "LM Studio",
   openai: "OpenAI",
+  qwen: "Qwen",
   anthropic: "Anthropic",
   groq: "Groq",
   gemini: "Gemini",
@@ -91,6 +92,7 @@ const LLM_PROVIDER_OPTIONS: {
   { value: "ollama", label: "Ollama", IconComponent: Monitor, requiresKey: false, isLocal: true },
   { value: "lm_studio", label: "LM Studio", IconComponent: Monitor, requiresKey: false, isLocal: true },
   { value: "openai", label: "OpenAI", IconComponent: Cloud, requiresKey: true, isLocal: false },
+  { value: "qwen", label: "Qwen", IconComponent: Sparkles, requiresKey: false, isLocal: false },
   { value: "anthropic", label: "Anthropic", IconComponent: Cloud, requiresKey: true, isLocal: false },
   { value: "groq", label: "Groq", IconComponent: Zap, requiresKey: true, isLocal: false },
   { value: "gemini", label: "Gemini", IconComponent: Cloud, requiresKey: true, isLocal: false },

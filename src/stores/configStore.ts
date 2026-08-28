@@ -258,8 +258,8 @@ export const useConfigStore = create<ConfigState>((set) => ({
   theme: "dark",
   sttProvider: "windows_native",
   sttLanguage: "en-US",
-  llmProvider: "codex",
-  llmModel: "codex-default",
+  llmProvider: "qwen",
+  llmModel: "qwen-plus",
   llmReasoningLevel: "medium",
   micDeviceId: null,
   systemDeviceId: null,
@@ -986,9 +986,9 @@ export const useConfigStore = create<ConfigState>((set) => ({
       );
 
       // Sync persisted LLM provider + model to Rust backend on startup.
-      // The Rust side starts with Ollama as default; this pushes the user's saved provider.
-      const loadedLLMProvider = llmProvider ?? "codex";
-      const loadedLLMModel = llmModel ?? (loadedLLMProvider === "codex" ? "codex-default" : "");
+      // The Rust side starts with the workspace default; this pushes the user's saved provider.
+      const loadedLLMProvider = llmProvider ?? "qwen";
+      const loadedLLMModel = llmModel ?? (loadedLLMProvider === "codex" ? "codex-default" : loadedLLMProvider === "qwen" ? "qwen-plus" : "");
       if (loadedLLMProvider) {
         import("../lib/ipc").then(async ({ setLLMProvider: ipcSetLLM, setActiveModel: ipcSetModel, getApiKey: ipcGetKey }) => {
           try {

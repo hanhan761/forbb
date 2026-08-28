@@ -42,6 +42,14 @@ interface ProviderCard {
 
 const CLOUD_PROVIDERS: ProviderCard[] = [
   {
+    type: "qwen",
+    label: "Qwen (DashScope)",
+    description: "Uses the workspace API from .env",
+    icon: <Sparkles className="h-5 w-5" />,
+    recommended: true,
+    requiresKey: false,
+  },
+  {
     type: "anthropic",
     label: "Anthropic",
     description: "Claude Sonnet, Opus, Haiku",
@@ -79,9 +87,11 @@ export function LLMSetupStep({
   const hasLocalLLM = ollamaRunning || lmStudioRunning;
 
   const [selectedProvider, setSelectedProvider] = useState<LLMProviderType>(
-    "codex"
+    "qwen"
   );
-  const [selectedModel, setSelectedModel] = useState(llmModel || "");
+  const [selectedModel, setSelectedModel] = useState(
+    llmProvider === "qwen" ? llmModel || "" : ""
+  );
   const [apiKey, setApiKeyValue] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [connectionStatus, setConnectionStatus] =
@@ -93,6 +103,8 @@ export function LLMSetupStep({
   // Auto-load models for local providers
   useEffect(() => {
     if (selectedProvider === "codex") {
+      handleLoadModels();
+    } else if (selectedProvider === "qwen") {
       handleLoadModels();
     } else if (selectedProvider === "ollama" && ollamaRunning) {
       handleLoadModels();
@@ -130,8 +142,22 @@ export function LLMSetupStep({
       }
       const configJson = buildProviderConfig();
       await setLLMProvider(configJson).catch(() => {});
+      setConfigProvider(selectedProvider);
       const modelList = await listModels(configJson);
       setModels(modelList);
+
+      // Make the workspace default immediately usable without requiring a
+      // second click in the model selector.
+      if (selectedProvider === "qwen" && !selectedModel) {
+        const preferredModel = modelList.some((model) => model.id === "qwen-plus")
+          ? "qwen-plus"
+          : modelList[0]?.id;
+        if (preferredModel) {
+          setSelectedModel(preferredModel);
+          setConfigModel(preferredModel);
+          await setActiveModel(selectedProvider, preferredModel).catch(() => {});
+        }
+      }
     } catch (err) {
       console.warn("[LLMSetupStep] Failed to load models:", err);
     } finally {
@@ -381,6 +407,8 @@ export function LLMSetupStep({
             <span className="font-medium text-foreground">Tip: </span>
             {selectedProvider === "codex"
               ? "Codex uses your local CLI login through a hidden stdio app-server. NexQ does not control the meeting window or enter text into it."
+              : selectedProvider === "qwen"
+                ? "Qwen is loaded from the project .env. Test the connection, then choose qwen-plus for the first run."
               : hasLocalLLM
                 ? "For privacy and speed, we recommend using Ollama with llama3.2. Your conversations never leave your machine."
               : "For the best experience, we recommend Anthropic Claude. For local privacy, install Ollama and run it before starting NexQ."}

@@ -23,6 +23,7 @@ pub enum ProviderType {
     Ollama,
     LmStudio,
     Openai,
+    Qwen,
     Anthropic,
     Groq,
     Gemini,
@@ -37,6 +38,7 @@ impl ProviderType {
             "ollama" => Ok(Self::Ollama),
             "lm_studio" => Ok(Self::LmStudio),
             "openai" => Ok(Self::Openai),
+            "qwen" | "dashscope" => Ok(Self::Qwen),
             "anthropic" => Ok(Self::Anthropic),
             "groq" => Ok(Self::Groq),
             "gemini" => Ok(Self::Gemini),
@@ -55,6 +57,7 @@ impl ProviderType {
             Self::Ollama => "ollama",
             Self::LmStudio => "lm_studio",
             Self::Openai => "openai",
+            Self::Qwen => "qwen",
             Self::Anthropic => "anthropic",
             Self::Groq => "groq",
             Self::Gemini => "gemini",
@@ -69,6 +72,7 @@ impl ProviderType {
             Self::Ollama => "Ollama",
             Self::LmStudio => "LM Studio",
             Self::Openai => "OpenAI",
+            Self::Qwen => "Qwen (DashScope)",
             Self::Anthropic => "Anthropic",
             Self::Groq => "Groq",
             Self::Gemini => "Google Gemini",
@@ -83,6 +87,7 @@ impl ProviderType {
             Self::Ollama => "http://localhost:11434",
             Self::LmStudio => "http://localhost:1234/v1",
             Self::Openai => "https://api.openai.com/v1",
+            Self::Qwen => "https://dashscope.aliyuncs.com/compatible-mode/v1",
             Self::Anthropic => "https://api.anthropic.com",
             Self::Groq => "https://api.groq.com/openai/v1",
             Self::Gemini => "https://generativelanguage.googleapis.com",
@@ -92,7 +97,7 @@ impl ProviderType {
     }
 
     pub fn requires_api_key(&self) -> bool {
-        matches!(self, Self::Openai | Self::Anthropic | Self::Groq | Self::Gemini | Self::Openrouter)
+        matches!(self, Self::Openai | Self::Qwen | Self::Anthropic | Self::Groq | Self::Gemini | Self::Openrouter)
     }
 
     pub fn is_local(&self) -> bool {
@@ -162,6 +167,21 @@ impl LLMRouter {
                     LLMError::NotConfigured("OpenAI API key required".to_string())
                 })?;
                 Box::new(openai_compat::create_openai_client(api_key))
+            }
+            ProviderType::Qwen => {
+                let api_key = config
+                    .api_key
+                    .or_else(|| std::env::var("DASHSCOPE_API_KEY").ok())
+                    .filter(|key| !key.trim().is_empty())
+                    .ok_or_else(|| {
+                        LLMError::NotConfigured(
+                            "Qwen API key missing. Set DASHSCOPE_API_KEY in .env".to_string(),
+                        )
+                    })?;
+                let base_url = config
+                    .base_url
+                    .or_else(|| std::env::var("DASHSCOPE_BASE_URL").ok());
+                Box::new(openai_compat::create_qwen_client(&api_key, base_url.as_deref()))
             }
             ProviderType::Anthropic => {
                 let api_key = config.api_key.as_deref().ok_or_else(|| {
@@ -269,6 +289,7 @@ impl LLMRouter {
             ProviderType::Ollama,
             ProviderType::LmStudio,
             ProviderType::Openai,
+            ProviderType::Qwen,
             ProviderType::Anthropic,
             ProviderType::Groq,
             ProviderType::Gemini,

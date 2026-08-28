@@ -231,8 +231,8 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
                 </span>
               ) : (
                 <span>
-                  No local LLM found. You can configure a cloud provider in the
-                  next steps, or install Ollama later.
+                  No local LLM found. The next step can connect the workspace
+                  Qwen cloud model; Ollama is optional.
                 </span>
               )}
             </p>

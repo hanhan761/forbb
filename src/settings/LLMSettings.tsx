@@ -38,6 +38,7 @@ const PROVIDER_DISPLAY: Record<
   ollama: { label: "Ollama", description: "Local models via Ollama", requiresKey: false, isLocal: true },
   lm_studio: { label: "LM Studio", description: "Local models via LM Studio", requiresKey: false, isLocal: true },
   openai: { label: "OpenAI", description: "GPT-4o, GPT-4, etc.", requiresKey: true, isLocal: false },
+  qwen: { label: "Qwen (DashScope)", description: "Workspace API from .env", requiresKey: false, isLocal: false },
   anthropic: { label: "Anthropic", description: "Claude Sonnet, Opus, Haiku", requiresKey: true, isLocal: false },
   groq: { label: "Groq", description: "Ultra-fast inference", requiresKey: true, isLocal: false },
   gemini: { label: "Google Gemini", description: "Gemini Pro, Flash", requiresKey: true, isLocal: false },
@@ -46,7 +47,7 @@ const PROVIDER_DISPLAY: Record<
 };
 
 const ALL_PROVIDERS: LLMProviderType[] = [
-  "codex", "ollama", "lm_studio", "openai", "anthropic", "groq", "gemini", "openrouter", "custom",
+  "codex", "ollama", "lm_studio", "openai", "qwen", "anthropic", "groq", "gemini", "openrouter", "custom",
 ];
 
 // Filter out known embedding-only models
@@ -146,7 +147,7 @@ export function LLMSettings() {
   // Check which providers have stored API keys (for badge display)
   useEffect(() => {
     async function checkAllKeys() {
-      const cloudProviders = ["openai", "anthropic", "groq", "gemini", "openrouter"];
+      const cloudProviders = ["openai", "qwen", "anthropic", "groq", "gemini", "openrouter"];
       const status: Record<string, boolean> = {};
       for (const p of cloudProviders) {
         try { status[p] = await hasApiKey(p); } catch { status[p] = false; }

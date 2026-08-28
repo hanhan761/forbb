@@ -153,8 +153,37 @@ fn hide_all(app: &tauri::AppHandle) {
     }
 }
 
+/// Load the developer-provided environment file without ever logging its contents.
+/// The first candidate is the repository working directory used by `tauri dev`;
+/// the executable-parent candidates also make local packaged builds convenient.
+fn load_project_env() {
+    let mut candidates = Vec::new();
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(current_dir.join(".env"));
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        let mut dir = exe.parent().map(std::path::Path::to_path_buf);
+        for _ in 0..5 {
+            let Some(current) = dir else { break };
+            candidates.push(current.join(".env"));
+            dir = current.parent().map(std::path::Path::to_path_buf);
+        }
+    }
+
+    for path in candidates {
+        if path.is_file() {
+            let _ = dotenvy::from_path(path);
+            break;
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    load_project_env();
+
     // Initialize env_logger so all log::info/warn/error macros produce output.
     // Without this, every log statement in the backend is a no-op.
     env_logger::Builder::from_env(
@@ -275,9 +304,14 @@ pub fn run() {
             // -- Initialize LLMRouter with auto-detected provider --
             let mut llm_router = llm::LLMRouter::new();
 
-            // Prefer the locally authenticated Codex app-server when the CLI
-            // is installed; fall back to Ollama for existing local setups.
-            let default_provider = if llm::codex::is_available() {
+            // Prefer the workspace-provided Qwen API when available. Local
+            // providers remain the fallback for machines without the .env key.
+            let has_qwen_key = std::env::var("DASHSCOPE_API_KEY")
+                .map(|key| !key.trim().is_empty())
+                .unwrap_or(false);
+            let default_provider = if has_qwen_key {
+                "qwen"
+            } else if llm::codex::is_available() {
                 "codex"
             } else {
                 "ollama"
@@ -292,7 +326,15 @@ pub fn run() {
             };
             match llm_router.set_provider(default_llm_config) {
                 Ok(()) => {
-                    if default_provider == "codex" {
+                    if default_provider == "qwen" {
+                        llm_router.set_active_model(
+                            std::env::var("QWEN_MODEL")
+                                .ok()
+                                .filter(|model| !model.trim().is_empty())
+                                .unwrap_or_else(|| "qwen-plus".to_string()),
+                        );
+                        log::info!("LLM router: Qwen (DashScope) set as default provider");
+                    } else if default_provider == "codex" {
                         llm_router.set_active_model("codex-default".to_string());
                         log::info!("LLM router: local Codex app-server set as default provider");
                     } else {
@@ -300,7 +342,7 @@ pub fn run() {
                     }
                 }
                 Err(e) => {
-                    log::warn!("LLM router: Failed to set Ollama as default: {}", e);
+                    log::warn!("LLM router: Failed to set default provider: {}", e);
                 }
             }
 

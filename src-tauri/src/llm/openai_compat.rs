@@ -1,5 +1,5 @@
 // Sub-PRD 5: Shared OpenAI-compatible client
-// Used by: OpenAI, Groq, OpenRouter, LM Studio
+// Used by: OpenAI, Qwen, Groq, OpenRouter, LM Studio
 
 use futures::StreamExt;
 use serde_json::json;
@@ -165,6 +165,11 @@ impl LLMProvider for OpenAICompatClient {
         if let Some(max_tok) = params.max_tokens {
             body["max_tokens"] = json!(max_tok);
         }
+        // Keep Qwen responses low-latency for live assistance. The user can
+        // still select a reasoning-focused model when that is explicitly desired.
+        if self.config.provider_name == "qwen" {
+            body["enable_thinking"] = json!(false);
+        }
 
         let request = self
             .apply_auth(self.client.post(&url))
@@ -270,6 +275,20 @@ pub fn create_openai_client(api_key: &str) -> OpenAICompatClient {
     OpenAICompatClient::new(OpenAICompatConfig {
         provider_name: "openai".to_string(),
         base_url: "https://api.openai.com/v1".to_string(),
+        auth_header: Some("Authorization".to_string()),
+        auth_value: Some(format!("Bearer {}", api_key)),
+        extra_headers: vec![],
+    })
+}
+
+/// Create a Qwen client through Alibaba Cloud Model Studio's OpenAI-compatible API.
+pub fn create_qwen_client(api_key: &str, base_url: Option<&str>) -> OpenAICompatClient {
+    OpenAICompatClient::new(OpenAICompatConfig {
+        provider_name: "qwen".to_string(),
+        base_url: base_url
+            .unwrap_or("https://dashscope.aliyuncs.com/compatible-mode/v1")
+            .trim_end_matches('/')
+            .to_string(),
         auth_header: Some("Authorization".to_string()),
         auth_value: Some(format!("Bearer {}", api_key)),
         extra_headers: vec![],
