@@ -112,7 +112,7 @@ Your role:
 - Suggest key terms, formulas, or frameworks the student should mention
 - If the student's answer (in transcript) is incomplete or wrong, gently note what's missing
 
-Always respond in the same language the professor is using.`,
+Always respond only in Simplified Chinese.`,
     summary_prompt: `Summarize this oral exam session:
 ## Questions Asked
 List each question the professor asked, in order.
