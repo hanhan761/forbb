@@ -13,6 +13,7 @@ import type {
   GroqConfig,
   AudioMode,
   AIScenario,
+  AIResponseLanguage,
 } from "../lib/types";
 
 const DEFAULT_DEEPGRAM_CONFIG: DeepgramConfig = {
@@ -126,6 +127,8 @@ interface ConfigState {
   autoTrigger: boolean;
   autoSummary: boolean;
   contextWindowSeconds: number;
+  /** Language for generated assistance; independent from live translation target. */
+  aiResponseLanguage: AIResponseLanguage;
 
   // System
   startOnLogin: boolean;
@@ -213,6 +216,7 @@ interface ConfigState {
   setAutoTrigger: (enabled: boolean) => void;
   setAutoSummary: (enabled: boolean) => void;
   setContextWindowSeconds: (seconds: number) => void;
+  setAIResponseLanguage: (language: AIResponseLanguage) => void;
   setStartOnLogin: (enabled: boolean) => void;
   setDataDirectory: (dir: string) => void;
   setFirstRunCompleted: (completed: boolean) => void;
@@ -276,6 +280,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   autoTrigger: true,
   autoSummary: true,
   contextWindowSeconds: 120,
+  aiResponseLanguage: "auto",
   startOnLogin: false,
   dataDirectory: "",
   firstRunCompleted: false,
@@ -520,6 +525,10 @@ export const useConfigStore = create<ConfigState>((set) => ({
     set({ contextWindowSeconds: seconds });
     persistValue("contextWindowSeconds", seconds);
   },
+  setAIResponseLanguage: (language) => {
+    set({ aiResponseLanguage: language });
+    persistValue("aiResponseLanguage", language);
+  },
   setStartOnLogin: (enabled) => {
     set({ startOnLogin: enabled });
     persistValue("startOnLogin", enabled);
@@ -696,6 +705,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
       const autoTrigger = await store.get<boolean>("autoTrigger");
       const autoSummary = await store.get<boolean>("autoSummary");
       const contextWindowSeconds = await store.get<number>("contextWindowSeconds");
+      const aiResponseLanguage = await store.get<AIResponseLanguage>("aiResponseLanguage");
       const startOnLogin = await store.get<boolean>("startOnLogin");
       const dataDirectory = await store.get<string>("dataDirectory");
       const firstRunCompleted = await store.get<boolean>("firstRunCompleted");
@@ -843,6 +853,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         ...(autoTrigger != null && { autoTrigger }),
         ...(autoSummary != null && { autoSummary }),
         ...(contextWindowSeconds != null && { contextWindowSeconds }),
+        ...(aiResponseLanguage != null && { aiResponseLanguage }),
         ...(startOnLogin != null && { startOnLogin }),
         ...(dataDirectory != null && { dataDirectory }),
         ...(firstRunCompleted != null && { firstRunCompleted }),
@@ -932,6 +943,9 @@ export const useConfigStore = create<ConfigState>((set) => ({
       });
       store.onKeyChange<"low" | "medium" | "high" | "xhigh">("llmReasoningLevel", (val) => {
         if (val != null) set({ llmReasoningLevel: val });
+      });
+      store.onKeyChange<AIResponseLanguage>("aiResponseLanguage", (val) => {
+        if (val != null) set({ aiResponseLanguage: val });
       });
       store.onKeyChange<InterviewProfile[]>("interviewProfiles", (val) => {
         if (val != null) set({ interviewProfiles: val });

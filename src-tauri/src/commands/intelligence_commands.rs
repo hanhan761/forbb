@@ -109,12 +109,49 @@ fn count_total_segments(segments_json: &str) -> usize {
         .unwrap_or(0)
 }
 
+/// Build the language directive for generated AI assistance.
+///
+/// This is deliberately separate from live translation: translation can stay
+/// in Chinese while a "What to Say" answer remains in English for speaking to
+/// an English-speaking interviewer, or vice versa.
+fn get_response_language_instruction(response_language: Option<&str>) -> &'static str {
+    match response_language.unwrap_or("auto").trim().to_ascii_lowercase().as_str() {
+        "zh" | "zh-cn" | "chinese" => {
+            "Respond in Simplified Chinese. Keep the wording natural and easy to read aloud when the mode asks for a speakable answer."
+        }
+        "en" | "en-us" | "english" => {
+            "Respond in English. Keep the wording natural and easy to speak aloud when the mode asks for a speakable answer."
+        }
+        _ => {
+            "Respond in the same language as the latest substantive interviewer question or explicit user question, or otherwise the dominant language of the latest exchange. If the language is unclear, follow the language used in the transcript."
+        }
+    }
+}
+
+#[cfg(test)]
+mod response_language_tests {
+    use super::get_response_language_instruction;
+
+    #[test]
+    fn defaults_to_following_the_latest_exchange() {
+        let instruction = get_response_language_instruction(None);
+        assert!(instruction.contains("same language as the latest substantive interviewer question or explicit user question"));
+    }
+
+    #[test]
+    fn supports_explicit_chinese_and_english_modes() {
+        assert!(get_response_language_instruction(Some("zh")).contains("Simplified Chinese"));
+        assert!(get_response_language_instruction(Some("en")).contains("Respond in English"));
+    }
+}
+
 #[command]
 pub async fn generate_assist(
     mode: String,
     custom_question: Option<String>,
     route: Option<String>,
     answer_length: Option<String>,
+    response_language: Option<String>,
     reasoning_effort: Option<String>,
     glossary: Option<Vec<String>>,
     transcript_segments: Option<String>,
@@ -328,13 +365,14 @@ pub async fn generate_assist(
     };
 
     let system_prompt = format!(
-        "{}\n\nAnswer length: {}. Keep the English answer natural and speakable; do not add unsupported personal details.{}{}",
+        "{}\n\nAnswer length: {}. {} Do not add unsupported personal details.{}{}",
         system_prompt,
         match answer_length.as_str() {
             "short" => "Short (15–30 seconds)",
             "detailed" => "Detailed (1–2 minutes)",
             _ => "Normal (30–60 seconds)",
         },
+        get_response_language_instruction(response_language.as_deref()),
         glossary_instruction,
         if mode == "MeetingSummary" {
             "\n\nReview persistence requirement: include a ## Mistake Bank section. Classify each weak point as Technical, Research, or English and include the question, weak point, correction, and next drill; if none, write None found."

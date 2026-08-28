@@ -241,6 +241,7 @@ export async function generateAssist(
     route,
     answerLength,
     reasoningEffort: config.llmReasoningLevel,
+    responseLanguage: config.aiResponseLanguage,
     glossary,
     transcriptSegments: JSON.stringify(segments),
   });

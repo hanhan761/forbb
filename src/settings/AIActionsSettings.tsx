@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAIActionsStore } from "../stores/aiActionsStore";
-import type { ActionConfig, InstructionPresets } from "../lib/types";
+import { useConfigStore } from "../stores/configStore";
+import type { ActionConfig, AIResponseLanguage, InstructionPresets } from "../lib/types";
 import {
   ChevronDown,
   ChevronRight,
@@ -61,6 +62,12 @@ const OPINION_OPTIONS = [
   { label: "Add my take", value: "add" },
 ];
 
+const RESPONSE_LANGUAGE_OPTIONS: Array<{ label: string; value: AIResponseLanguage }> = [
+  { label: "Follow interviewer (recommended)", value: "auto" },
+  { label: "English — ready to speak", value: "en" },
+  { label: "简体中文 — easier to read", value: "zh" },
+];
+
 
 /** Help content for each setting — shown via HelpButton/HelpPanel toggle */
 const HELP: Record<string, { title: string; body: string }> = {
@@ -87,6 +94,10 @@ const HELP: Record<string, { title: string; body: string }> = {
   autoTrigger: {
     title: "Auto-Trigger",
     body: "When enabled, NexQ listens for questions directed at you during the meeting and automatically generates suggested answers.\n\nTurn OFF during presentations or when you want manual-only control. You can still trigger actions manually with the overlay buttons.",
+  },
+  responseLanguage: {
+    title: "AI Answer Language",
+    body: "Controls the language used by AI assistance only — it does not change live captions or simultaneous translation.\n\nFollow interviewer — matches the latest substantive question (recommended)\nEnglish — useful when the answer will be spoken to an English-speaking interviewer\n简体中文 — useful when you want the answer explained for reading",
   },
   temperature: {
     title: "Temperature",
@@ -225,6 +236,8 @@ export function AIActionsSettings() {
   const removeCustomAction = useAIActionsStore((s) => s.removeCustomAction);
   const setInstructionPresets = useAIActionsStore((s) => s.setInstructionPresets);
   const setCustomInstructions = useAIActionsStore((s) => s.setCustomInstructions);
+  const aiResponseLanguage = useConfigStore((s) => s.aiResponseLanguage);
+  const setAIResponseLanguage = useConfigStore((s) => s.setAIResponseLanguage);
 
   const [expandedActions, setExpandedActions] = useState<Record<string, boolean>>({});
   const [expandedOverrides, setExpandedOverrides] = useState<Record<string, boolean>>({});
@@ -527,6 +540,31 @@ export function AIActionsSettings() {
             />
 
             <div className="space-y-4">
+              {/* AI Answer Language */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  AI Answer Language
+                  <HelpButton id="responseLanguage" activeId={openHelp} onToggle={toggleHelp} />
+                </label>
+                {openHelp === "responseLanguage" && <HelpPanel id="responseLanguage" />}
+                <select
+                  value={aiResponseLanguage}
+                  onChange={(e) => setAIResponseLanguage(e.target.value as AIResponseLanguage)}
+                  className="mt-2 w-full rounded-lg border border-border/50 bg-secondary/30 px-3 py-2 text-xs text-foreground focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                >
+                  {RESPONSE_LANGUAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-meta text-muted-foreground/60">
+                  Only changes AI assistance output; captions and translation are independent.
+                </p>
+              </div>
+
+              <div className="h-px bg-border/20" />
+
               {/* Auto-Trigger */}
               <div>
                 <div className="flex items-center justify-between">

@@ -240,6 +240,9 @@ export type QueryRoute =
 
 export type AnswerLength = "short" | "normal" | "detailed";
 
+/** Language used for generated AI assistance, independent from transcript translation. */
+export type AIResponseLanguage = "auto" | "en" | "zh";
+
 export type QuestionType =
   | "personal"
   | "project"
