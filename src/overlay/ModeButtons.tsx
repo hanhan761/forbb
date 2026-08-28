@@ -40,7 +40,7 @@ const MODE_SHORTCUTS: Record<string, string> = {
 // Ordered built-in modes — AskQuestion now included
 const BUILT_IN_ORDER = ["Assist", "WhatToSay", "Shorten", "FollowUp", "Recap", "AskQuestion"];
 
-export function ModeButtons() {
+export function ModeButtons({ compact = false }: { compact?: boolean }) {
   const currentMode = useStreamStore((s) => s.currentMode);
   const isStreaming = useStreamStore((s) => s.isStreaming);
   const actions = useAIActionsStore((s) => s.configs.actions);
@@ -60,8 +60,12 @@ export function ModeButtons() {
   const visibleModes = useMemo(() => {
     const result: { mode: string; label: string; shortcut: string; icon: typeof Sparkles; isCustom: boolean }[] = [];
 
+    // The live overlay only needs the two primary interactions. The full set
+    // remains available to the non-overlay keyboard/settings flows.
+    const modeOrder = compact ? ["Assist", "AskQuestion"] : BUILT_IN_ORDER;
+
     // Add built-in modes in order
-    for (const modeKey of BUILT_IN_ORDER) {
+    for (const modeKey of modeOrder) {
       const cfg = actions[modeKey];
       if (cfg && cfg.visible) {
         result.push({

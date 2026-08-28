@@ -24,7 +24,7 @@ interface TrackedQuestion extends DetectedQuestion {
   assisted: boolean;
 }
 
-export function QuestionDetector() {
+export function QuestionDetector({ compact = false }: { compact?: boolean }) {
   const [questions, setQuestions] = useState<TrackedQuestion[]>([]);
   const processedIdsRef = useRef<Set<string>>(new Set());
   const autoAssistedKeysRef = useRef<Set<string>>(new Set());
@@ -170,8 +170,8 @@ export function QuestionDetector() {
         )}
       </div>
 
-      {/* Previous questions — compact list */}
-      {previousQuestions.length > 0 && (
+      {/* Previous questions — useful in the full detector, hidden in the minimal overlay */}
+      {!compact && previousQuestions.length > 0 && (
         <div className="flex flex-col gap-1">
           {previousQuestions.map((q, idx) => {
             const realIdx = idx + 1;

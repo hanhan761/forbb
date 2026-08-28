@@ -19,7 +19,7 @@ import { ColorPickerButton } from "../components/ColorPickerButton";
 type TabId = "current" | "history-0" | "history-1" | string;
 
 // Sub-PRD 6: Streaming markdown, response history tabs, pin/copy
-export function AIResponsePanel() {
+export function AIResponsePanel({ compact = false }: { compact?: boolean }) {
   const isStreaming = useStreamStore((s) => s.isStreaming);
   const currentContent = useStreamStore((s) => s.currentContent);
   const currentMode = useStreamStore((s) => s.currentMode);
@@ -299,8 +299,8 @@ export function AIResponsePanel() {
       </div>
       </div>
 
-      {/* Typeset controls */}
-      <div className="flex shrink-0 flex-col gap-1 border-t border-border/10 px-1 pt-1.5">
+      {/* Typeset controls stay available to the full response view, not the live overlay. */}
+      {!compact && <div className="flex shrink-0 flex-col gap-1 border-t border-border/10 px-1 pt-1.5">
         {/* Row 1: font size + color */}
         <div className="flex items-center gap-3">
           <span className="text-[0.6rem] uppercase tracking-widest text-muted-foreground/40 font-medium">AI Text</span>
@@ -341,7 +341,7 @@ export function AIResponsePanel() {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

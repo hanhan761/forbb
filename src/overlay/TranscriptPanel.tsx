@@ -12,7 +12,7 @@ import { mergeConsecutiveSegments } from "../lib/mergeSegments";
 import { Mic, MicOff, Volume2, VolumeX, Search, X, Radio } from "lucide-react";
 import { ColorPickerButton } from "../components/ColorPickerButton";
 
-export function TranscriptPanel() {
+export function TranscriptPanel({ compact = false }: { compact?: boolean }) {
   const segments = useTranscriptStore((s) => s.segments);
   const searchQuery = useTranscriptStore((s) => s.searchQuery);
   const autoScroll = useTranscriptStore((s) => s.autoScroll);
@@ -210,33 +210,35 @@ export function TranscriptPanel() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      {/* Search bar (shown when there's a search query or toggled) */}
-      <div className="flex items-center gap-2 rounded-lg bg-muted/20 mx-1 mt-1 mb-1.5 px-2.5 py-1.5">
-        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search transcript..."
-          aria-label="Search transcript"
-          maxLength={200}
-          className="flex-1 bg-transparent text-xs text-foreground/90 placeholder:text-muted-foreground/50 outline-none"
-        />
-        {searchQuery && (
-          <>
-            <span className="text-meta text-muted-foreground/60">
-              {matchCount} match{matchCount !== 1 ? "es" : ""}
-            </span>
-            <button
-              onClick={() => setSearchQuery("")}
-              className="rounded-full p-0.5 text-muted-foreground/60 hover:text-foreground/70 hover:bg-accent/50"
-              aria-label="Clear search"
-            >
-              <X className="h-3 w-3" aria-hidden="true" />
-            </button>
-          </>
-        )}
-      </div>
+      {/* Search is useful in the full transcript view, but not during live capture. */}
+      {!compact && (
+        <div className="flex items-center gap-2 rounded-lg bg-muted/20 mx-1 mt-1 mb-1.5 px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search transcript..."
+            aria-label="Search transcript"
+            maxLength={200}
+            className="flex-1 bg-transparent text-xs text-foreground/90 placeholder:text-muted-foreground/50 outline-none"
+          />
+          {searchQuery && (
+            <>
+              <span className="text-meta text-muted-foreground/60">
+                {matchCount} match{matchCount !== 1 ? "es" : ""}
+              </span>
+              <button
+                onClick={() => setSearchQuery("")}
+                className="rounded-full p-0.5 text-muted-foreground/60 hover:text-foreground/70 hover:bg-accent/50"
+                aria-label="Clear search"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Transcript lines — relative+absolute breaks out of flex min-height */}
       <div className="relative flex-1 min-h-0">
@@ -259,24 +261,26 @@ export function TranscriptPanel() {
       </div>
       </div>
 
-      {/* Typeset controls */}
-      <div className="flex items-center gap-2 mx-1 mb-1 px-2.5 py-1 border-t border-border/10">
-        <span className="text-[0.6rem] uppercase tracking-widest text-muted-foreground/40 font-medium">Text</span>
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => setTranscriptFontSize(Math.max(10, transcriptFontSize - 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.6rem] text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
-          <span className="text-[0.6rem] tabular-nums text-muted-foreground/50 w-5 text-center">{transcriptFontSize}</span>
-          <button onClick={() => setTranscriptFontSize(Math.min(20, transcriptFontSize + 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.75rem] font-medium text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
+      {/* Typeset controls stay available to the full transcript view, not the live overlay. */}
+      {!compact && (
+        <div className="flex items-center gap-2 mx-1 mb-1 px-2.5 py-1 border-t border-border/10">
+          <span className="text-[0.6rem] uppercase tracking-widest text-muted-foreground/40 font-medium">Text</span>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => setTranscriptFontSize(Math.max(10, transcriptFontSize - 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.6rem] text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
+            <span className="text-[0.6rem] tabular-nums text-muted-foreground/50 w-5 text-center">{transcriptFontSize}</span>
+            <button onClick={() => setTranscriptFontSize(Math.min(20, transcriptFontSize + 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.75rem] font-medium text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
+          </div>
+          <ColorPickerButton value={transcriptTextColor} onChange={setTranscriptTextColor} label="Text color" />
+          <div className="h-3 w-px bg-border/10" />
+          <span className="text-[0.6rem] uppercase tracking-widest text-muted-foreground/40 font-medium">Translation</span>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => setTranslationFontSize(Math.max(9, translationFontSize - 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.6rem] text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
+            <span className="text-[0.6rem] tabular-nums text-muted-foreground/50 w-5 text-center">{translationFontSize}</span>
+            <button onClick={() => setTranslationFontSize(Math.min(18, translationFontSize + 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.75rem] font-medium text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
+          </div>
+          <ColorPickerButton value={translationTextColor} onChange={setTranslationTextColor} label="Translation color" />
         </div>
-        <ColorPickerButton value={transcriptTextColor} onChange={setTranscriptTextColor} label="Text color" />
-        <div className="h-3 w-px bg-border/10" />
-        <span className="text-[0.6rem] uppercase tracking-widest text-muted-foreground/40 font-medium">Translation</span>
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => setTranslationFontSize(Math.max(9, translationFontSize - 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.6rem] text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
-          <span className="text-[0.6rem] tabular-nums text-muted-foreground/50 w-5 text-center">{translationFontSize}</span>
-          <button onClick={() => setTranslationFontSize(Math.min(18, translationFontSize + 1))} className="h-5 w-5 flex items-center justify-center rounded text-[0.75rem] font-medium text-muted-foreground/50 hover:bg-accent/40 transition-colors">A</button>
-        </div>
-        <ColorPickerButton value={translationTextColor} onChange={setTranslationTextColor} label="Translation color" />
-      </div>
+      )}
 
       {/* Live audio activity indicators — mode-aware */}
       {isRecording && (
