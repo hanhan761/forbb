@@ -274,6 +274,12 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
         const { useTopicSectionStore } = await import("./topicSectionStore");
         useTopicSectionStore.getState().clearSections();
       } catch { /* non-critical */ }
+      try {
+        const { useTranslationStore } = await import("./translationStore");
+        const translation = useTranslationStore.getState();
+        translation.clearTranslations();
+        translation.setAutoTranslateActive(translation.autoTranslateEnabled);
+      } catch { /* non-critical */ }
 
       // 4. Set meeting state
       const now = Date.now();

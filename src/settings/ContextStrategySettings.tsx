@@ -270,7 +270,7 @@ const DEFAULT_RAG_CONFIG: RagConfig = {
   chunk_overlap: 64,
   splitting_strategy: "recursive",
   top_k: 5,
-  search_mode: "hybrid",
+  search_mode: "keyword",
   similarity_threshold: 0.3,
   semantic_weight: 0.7,
   include_transcript: false, // Transcript is sent as context window, not indexed
@@ -390,8 +390,15 @@ export function ContextStrategySettings() {
   useEffect(() => {
     loadRagConfig();
     refreshIndexStatus();
-    checkOllamaStatus();
-  }, [loadRagConfig, refreshIndexStatus, checkOllamaStatus]);
+  }, [loadRagConfig, refreshIndexStatus]);
+
+  // Keyword search is fully local and does not need Ollama. Only probe the
+  // embedding service when the user selects a semantic-capable mode.
+  useEffect(() => {
+    if (localConfig.search_mode !== "keyword") {
+      checkOllamaStatus();
+    }
+  }, [localConfig.search_mode, checkOllamaStatus]);
 
   useEffect(() => {
     if (ragConfig) {
@@ -591,26 +598,35 @@ export function ContextStrategySettings() {
               <h3 className="text-sm font-semibold text-primary/80">Connection</h3>
             </div>
             <div className="space-y-4">
-              {/* Ollama status */}
-              <div className="flex items-center gap-3">
-                {ollamaStatus?.connected ? (
-                  <>
-                    <div className="h-2.5 w-2.5 rounded-full bg-success" />
-                    <Wifi className="h-3.5 w-3.5 text-success" />
-                    <span className="text-xs text-success">Ollama Connected</span>
-                    <span className="text-meta text-muted-foreground">
-                      ({ollamaStatus.models.length} model{ollamaStatus.models.length !== 1 ? "s" : ""})
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                    <WifiOff className="h-3.5 w-3.5 text-red-500" />
-                    <span className="text-xs text-red-500">Ollama Disconnected</span>
-                    <span className="text-meta text-muted-foreground/60">— start Ollama to use embedding</span>
-                  </>
-                )}
-              </div>
+              {/* Ollama status / keyword-only status */}
+              {localConfig.search_mode === "keyword" ? (
+                <div className="flex items-center gap-3">
+                  <div className="h-2.5 w-2.5 rounded-full bg-success" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                  <span className="text-xs text-success">Keyword search enabled</span>
+                  <span className="text-meta text-muted-foreground">— Ollama not required</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  {ollamaStatus?.connected ? (
+                    <>
+                      <div className="h-2.5 w-2.5 rounded-full bg-success" />
+                      <Wifi className="h-3.5 w-3.5 text-success" />
+                      <span className="text-xs text-success">Ollama Connected</span>
+                      <span className="text-meta text-muted-foreground">
+                        ({ollamaStatus.models.length} model{ollamaStatus.models.length !== 1 ? "s" : ""})
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                      <WifiOff className="h-3.5 w-3.5 text-red-500" />
+                      <span className="text-xs text-red-500">Ollama Disconnected</span>
+                      <span className="text-meta text-muted-foreground/60">— start Ollama to use embedding</span>
+                    </>
+                  )}
+                </div>
+              )}
 
               {ollamaStatus?.connected && (
                 <div className="flex items-center gap-2 text-xs">

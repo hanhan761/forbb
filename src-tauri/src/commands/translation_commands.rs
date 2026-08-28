@@ -504,11 +504,17 @@ async fn translate_via_llm(
         router.active_model().to_string()
     };
 
-    // Set up a buffer to collect streamed tokens
+    let params = crate::llm::provider::GenerationParams::default();
+    // Hold the provider lock before subscribing to tokens. Otherwise a
+    // translation request waiting behind an active assist stream could
+    // capture that earlier answer into its own translation buffer.
+    let provider = provider_arc.lock().await;
+
+    // Set up a buffer to collect only the stream that starts while the
+    // provider lock is held. All LLM providers serialize their streams on
+    // this mutex, so no other completion can interleave with this listener.
     let buffer = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let buffer_clone = buffer.clone();
-
-    // Listen for stream tokens and collect them
     let listener_id = app.listen("llm_stream_token", move |event| {
         if let Ok(payload) = serde_json::from_str::<crate::llm::provider::StreamTokenPayload>(event.payload()) {
             if let Ok(mut buf) = buffer_clone.lock() {
@@ -517,8 +523,6 @@ async fn translate_via_llm(
         }
     });
 
-    let params = crate::llm::provider::GenerationParams::default();
-    let provider = provider_arc.lock().await;
     let result = provider.stream_completion(
         messages, &model, params, app.clone()
     ).await;

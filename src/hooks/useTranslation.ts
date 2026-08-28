@@ -12,7 +12,15 @@ import { useMeetingStore } from "../stores/meetingStore";
 import { translateSegments, getMeetingTranslations } from "../lib/ipc";
 import type { TranscriptUpdateEvent } from "../lib/types";
 
-export function useTranslation() {
+interface UseTranslationOptions {
+  /**
+   * Only the launcher should start automatic translation requests. The
+   * overlay still subscribes to results so it can render them immediately.
+   */
+  enableAutoTranslate?: boolean;
+}
+
+export function useTranslation({ enableAutoTranslate = true }: UseTranslationOptions = {}) {
   const addTranslation = useTranslationStore((s) => s.addTranslation);
   const addTranslations = useTranslationStore((s) => s.addTranslations);
   const setBatchProgress = useTranslationStore((s) => s.setBatchProgress);
@@ -97,6 +105,8 @@ export function useTranslation() {
 
   // Auto-translate: listen for final transcript segments and translate when active
   useEffect(() => {
+    if (!enableAutoTranslate) return;
+
     let unFinal: UnlistenFn | null = null;
     let mounted = true;
     // Debounce timer ref per segment — stored as map of segmentId -> timeoutId
@@ -166,7 +176,7 @@ export function useTranslation() {
       debounceTimers.clear();
       if (unFinal) unFinal();
     };
-  }, []);
+  }, [enableAutoTranslate]);
 
   // Preload cached translations when meeting ID or target language changes
   useEffect(() => {

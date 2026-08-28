@@ -279,7 +279,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   startOnLogin: false,
   dataDirectory: "",
   firstRunCompleted: false,
-  contextStrategy: "stuffing",
+  contextStrategy: "local_rag",
   hotkeys: DEFAULT_HOTKEYS,
   rememberedMeetingSetup: null,
   interviewProfiles: [],

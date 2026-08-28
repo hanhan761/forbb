@@ -12,7 +12,6 @@ import { UpdateDialog } from "./components/UpdateDialog";
 import { UpdateDownloadToast, UpdateReadyToast } from "./components/UpdateToast";
 import { useTheme } from "./hooks/useTheme";
 import { useGlobalShortcut } from "./hooks/useGlobalShortcut";
-import { useTranslation } from "./hooks/useTranslation";
 import { useTraySync } from "./hooks/useTraySync";
 import { useUpdater } from "./hooks/useUpdater";
 import { useTranslationStore } from "./stores/translationStore";
@@ -44,9 +43,6 @@ function App() {
 
   // Demo mode keyboard shortcut (Ctrl+Shift+D)
   useDemoShortcut();
-
-  // Translation event subscriptions (needed for SelectionToolbar in all views)
-  useTranslation();
 
   // Sync frontend state to system tray icon & menu
   useTraySync();
@@ -173,6 +169,9 @@ function App() {
           elapsedMs: 0,
           lastPersistedIndex: 0,
         });
+        const translation = useTranslationStore.getState();
+        translation.clearTranslations();
+        translation.setAutoTranslateActive(translation.autoTranslateEnabled);
         useMeetingStore.getState().startTimer();
       }
     ).then((fn) => { unlisten = fn; });

@@ -67,8 +67,9 @@ interface TranslationState {
 
 export const useTranslationStore = create<TranslationState>((set, get) => ({
   // Persisted defaults
-  provider: "microsoft",
-  targetLang: "es",
+  // Qwen is the configured workspace provider; use it for translation too.
+  provider: "llm",
+  targetLang: "zh",
   sourceLang: "auto",
   displayMode: "inline",
   autoTranslateEnabled: true,
@@ -76,7 +77,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
   cacheEnabled: true,
 
   // Session defaults
-  autoTranslateActive: false,
+  autoTranslateActive: true,
   translations: new Map(),
   translating: new Set(),
   batchProgress: null,
@@ -173,7 +174,9 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       });
 
       // Sync the loaded languages to the backend immediately
-      const tl = targetLang ?? "en";
+      // Keep the backend in sync with the effective frontend defaults. The
+      // old fallback used "en", which made the UI and translator disagree.
+      const tl = targetLang ?? get().targetLang;
       const sl = sourceLang === "auto" ? undefined : (sourceLang ?? undefined);
       setTranslationLanguages(tl, sl).catch(() => {});
 

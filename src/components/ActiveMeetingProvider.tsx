@@ -13,6 +13,7 @@ import { useTranscript } from "../hooks/useTranscript";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useAudioConfigSync } from "../hooks/useAudioConfigSync";
 import { useStreamBuffer } from "../hooks/useStreamBuffer";
+import { useTranslation } from "../hooks/useTranslation";
 import { useCallLogCapture } from "../hooks/useCallLogCapture";
 import { useSTTStatus } from "../hooks/useSTTStatus";
 import { useDevLog } from "../hooks/useDevLog";
@@ -33,6 +34,7 @@ function OverlayMeetingHooks() {
   useMeetingTimer();
   useTranscript();    // transcript_final/update → local store
   useStreamBuffer();  // AI streaming events → local store
+  useTranslation({ enableAutoTranslate: false }); // display results; launcher owns requests
   useSTTStatus();     // STT connection status
   useDevLog();        // debug log entries
   return null;
@@ -42,6 +44,7 @@ function OverlayMeetingHooks() {
 function LauncherMeetingHooks() {
   useMeetingTimer();
   useTranscript();         // also subscribe here so persistence hook sees segments
+  useTranslation();        // final captions → Qwen translation requests
   useSpeechRecognition();  // web speech API (emits cross-window events for overlay)
   useAudioConfigSync();    // hot-swap STT/audio config
   useTranscriptPersistence(); // transcript store → SQLite DB

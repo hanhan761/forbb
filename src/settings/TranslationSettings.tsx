@@ -860,6 +860,14 @@ export function TranslationSettings() {
           <div className="rounded-xl border border-border/30 bg-card/50 p-4">
             <h3 className="mb-3 text-sm font-semibold text-primary/80">Behavior</h3>
             <div className="space-y-4">
+              {/* Auto-translate final transcript segments during a meeting */}
+              <ToggleRow
+                label="Auto-translate new transcript segments"
+                description="Translate final captions automatically during live meetings"
+                checked={autoTranslateEnabled}
+                onChange={setAutoTranslateEnabled}
+              />
+
               {/* Select-to-translate toolbar */}
               <ToggleRow
                 label="Select-to-translate toolbar"

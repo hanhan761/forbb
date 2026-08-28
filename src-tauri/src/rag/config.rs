@@ -34,7 +34,7 @@ pub struct RagConfig {
 impl Default for RagConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             embedding_model: "nomic-embed-text".to_string(),
             ollama_url: "http://localhost:11434".to_string(),
             batch_size: 32,
@@ -42,11 +42,27 @@ impl Default for RagConfig {
             chunk_overlap: 64,
             splitting_strategy: "recursive".to_string(),
             top_k: 5,
-            search_mode: "hybrid".to_string(),
+            // Keyword-only search keeps the knowledge base usable without
+            // requiring Ollama or another local embedding service.
+            search_mode: "keyword".to_string(),
             similarity_threshold: 0.3,
             semantic_weight: 0.7,
-            include_transcript: true,
+            include_transcript: false,
             embedding_dimensions: 768,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RagConfig;
+
+    #[test]
+    fn default_search_is_available_without_ollama() {
+        let config = RagConfig::default();
+
+        assert!(config.enabled);
+        assert_eq!(config.search_mode, "keyword");
+        assert!(!config.include_transcript);
     }
 }

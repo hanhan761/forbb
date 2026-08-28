@@ -3,6 +3,9 @@ import { HelpCircle, Sparkles, Check, Clock, X } from "lucide-react";
 import { onQuestionDetected } from "../lib/events";
 import { generateAssist } from "../lib/ipc";
 import { useTranscriptStore } from "../stores/transcriptStore";
+import { useAIActionsStore } from "../stores/aiActionsStore";
+import { useStreamStore } from "../stores/streamStore";
+import { showToast } from "../stores/toastStore";
 import type { DetectedQuestion } from "../lib/types";
 
 function looksLikeQuestion(text: string): boolean {
@@ -24,13 +27,47 @@ interface TrackedQuestion extends DetectedQuestion {
 export function QuestionDetector() {
   const [questions, setQuestions] = useState<TrackedQuestion[]>([]);
   const processedIdsRef = useRef<Set<string>>(new Set());
+  const autoAssistedKeysRef = useRef<Set<string>>(new Set());
   const segments = useTranscriptStore((s) => s.segments);
+  const autoTrigger = useAIActionsStore((s) => s.configs.globalDefaults.autoTrigger);
+  const isStreaming = useStreamStore((s) => s.isStreaming);
+  const autoTriggerRef = useRef(autoTrigger);
+  const isStreamingRef = useRef(isStreaming);
+
+  useEffect(() => {
+    autoTriggerRef.current = autoTrigger;
+    isStreamingRef.current = isStreaming;
+  }, [autoTrigger, isStreaming]);
 
   const addQuestion = useCallback((q: DetectedQuestion) => {
+    const key = `${q.timestamp_ms}:${q.source}:${q.text}`;
+    const shouldAutoAssist =
+      autoTriggerRef.current &&
+      !isStreamingRef.current &&
+      !autoAssistedKeysRef.current.has(key);
+
+    if (shouldAutoAssist) {
+      autoAssistedKeysRef.current.add(key);
+    }
+
     setQuestions((prev) => {
       if (prev.length > 0 && prev[0].text === q.text) return prev;
-      return [{ ...q, assisted: false }, ...prev].slice(0, 10);
+      return [{ ...q, assisted: shouldAutoAssist }, ...prev].slice(0, 10);
     });
+
+    if (shouldAutoAssist) {
+      generateAssist("Assist", q.text, "auto").catch((err) => {
+        setQuestions((prev) =>
+          prev.map((item) =>
+            item.text === q.text ? { ...item, assisted: false } : item,
+          ),
+        );
+        showToast(
+          err instanceof Error ? err.message : "Automatic AI assistance failed",
+          "error",
+        );
+      });
+    }
   }, []);
 
   useEffect(() => {
