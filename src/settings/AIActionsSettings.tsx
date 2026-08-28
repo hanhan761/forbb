@@ -63,8 +63,8 @@ const OPINION_OPTIONS = [
 ];
 
 const RESPONSE_LANGUAGE_OPTIONS: Array<{ label: string; value: AIResponseLanguage }> = [
-  { label: "Follow interviewer (recommended)", value: "auto" },
-  { label: "English — ready to speak", value: "en" },
+  { label: "English — ready to speak (recommended)", value: "en" },
+  { label: "Follow interviewer", value: "auto" },
   { label: "简体中文 — easier to read", value: "zh" },
 ];
 
@@ -97,7 +97,7 @@ const HELP: Record<string, { title: string; body: string }> = {
   },
   responseLanguage: {
     title: "AI Answer Language",
-    body: "Controls the language used by AI assistance only — it does not change live captions or simultaneous translation.\n\nFollow interviewer — matches the latest substantive question (recommended)\nEnglish — useful when the answer will be spoken to an English-speaking interviewer\n简体中文 — useful when you want the answer explained for reading",
+    body: "Controls the language used by AI assistance only — it does not change live captions or simultaneous translation.\n\nEnglish — ready-to-speak interview answer (default)\nFollow interviewer — matches the latest substantive question\n简体中文 — useful when you want the answer explained for reading",
   },
   temperature: {
     title: "Temperature",

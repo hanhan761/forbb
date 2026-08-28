@@ -280,7 +280,8 @@ export const useConfigStore = create<ConfigState>((set) => ({
   autoTrigger: true,
   autoSummary: true,
   contextWindowSeconds: 120,
-  aiResponseLanguage: "auto",
+  // English is the interview-ready default; users can switch to Auto or Chinese.
+  aiResponseLanguage: "en",
   startOnLogin: false,
   dataDirectory: "",
   firstRunCompleted: false,
