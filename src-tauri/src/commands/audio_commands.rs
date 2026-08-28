@@ -1676,6 +1676,16 @@ async fn create_stt_provider_for_party(
                          Download the model in Settings.",
                         e
                     );
+                    crate::stt::emit_stt_debug(
+                        app,
+                        "error",
+                        "stt",
+                        &format!(
+                            "[{}] Whisper.cpp model '{}' is unavailable; captions are disabled. \
+                             Download a Whisper model in Settings → Audio.",
+                            party_role, model_id
+                        ),
+                    );
                     Ok(None)
                 }
             }
