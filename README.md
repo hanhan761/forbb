@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src-tauri/icons/nexq-clean.png" alt="NexQ" width="120">
+  <img src="public/nexq-icon.png" alt="NexQ" width="120">
 </p>
 <p align="center">
   <strong>AI Meeting Assistant & Real-Time Interview Copilot</strong>

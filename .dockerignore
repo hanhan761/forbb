@@ -1,0 +1,31 @@
+# Keep local checkouts and Docker build contexts small.
+.git
+.github
+.playwright-mcp
+
+# Dependencies and generated output
+node_modules
+**/node_modules
+target
+**/target
+dist
+**/dist
+.astro
+**/.astro
+.vite
+**/.vite
+
+# Local caches, temporary files, and secrets
+tmp-compress
+*.tmp
+*.log
+.env
+.env.*
+*.pem
+*.key
+
+# Local application data
+recordings
+**/recordings
+*.db
+*.db-*

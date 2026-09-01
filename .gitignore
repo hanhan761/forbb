@@ -20,6 +20,9 @@ dist/
 *.swo
 *.code-workspace
 
+# Browser automation artifacts
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db

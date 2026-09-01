@@ -3,7 +3,7 @@ pub mod model_discovery;
 pub mod model_registry;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -26,6 +26,7 @@ impl ModelManager {
         if let Err(e) = std::fs::create_dir_all(&models_dir) {
             log::error!("Failed to create models directory: {}", e);
         }
+        cleanup_stale_downloads(&models_dir);
         Self {
             models_dir,
             active_downloads: HashMap::new(),
@@ -324,6 +325,49 @@ impl ModelManager {
                 }
             })
             .collect()
+    }
+}
+
+/// Remove abandoned model download artifacts left by an interrupted download.
+/// Completed models are never touched. The age check protects a slow download
+/// if a second app instance starts while it is still in progress.
+fn cleanup_stale_downloads(models_dir: &Path) {
+    let Ok(engine_entries) = std::fs::read_dir(models_dir) else {
+        return;
+    };
+
+    let mut removed = 0;
+    for engine_entry in engine_entries.flatten() {
+        let engine_dir = engine_entry.path();
+        if !engine_dir.is_dir() {
+            continue;
+        }
+
+        let Ok(model_entries) = std::fs::read_dir(&engine_dir) else {
+            continue;
+        };
+
+        for model_entry in model_entries.flatten() {
+            let path = model_entry.path();
+            let name = model_entry.file_name().to_string_lossy().to_string();
+            let is_abandoned_file = path.is_file()
+                && (name.ends_with(".download") || name.ends_with(".tar.bz2"));
+
+            if is_abandoned_file && downloader::is_stale_download(&path) {
+                match std::fs::remove_file(&path) {
+                    Ok(()) => removed += 1,
+                    Err(error) => log::warn!(
+                        "Failed to remove stale model download {}: {}",
+                        path.display(),
+                        error
+                    ),
+                }
+            }
+        }
+    }
+
+    if removed > 0 {
+        log::info!("Removed {} stale model download artifact(s)", removed);
     }
 }
 

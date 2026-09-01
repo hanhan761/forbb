@@ -5,6 +5,11 @@ description = "AI Meeting Assistant & Real-Time Interview Copilot"
 authors = ["NexQ"]
 edition = "2021"
 
+# Keep the shipped desktop binary small. Debug symbols are not needed in the
+# installer and are the main avoidable part of the release artifact.
+[profile.release]
+strip = "symbols"
+
 [lib]
 name = "nexq_lib"
 crate-type = ["lib", "cdylib", "staticlib"]

@@ -3,7 +3,7 @@
 // tokenizer.json, and config.json.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -36,6 +36,7 @@ impl OpusMtManager {
         if let Err(e) = std::fs::create_dir_all(&models_dir) {
             log::error!("Failed to create OPUS-MT models directory: {}", e);
         }
+        cleanup_stale_downloads(&models_dir);
 
         // Load persisted active model
         let active_file = models_dir.join("active_model.txt");
@@ -115,7 +116,7 @@ impl OpusMtManager {
         log::info!("OPUS-MT model deactivated");
     }
 
-    /// Start downloading a model. Downloads 3 files sequentially with combined progress.
+    /// Start downloading a model. Downloads 4 files sequentially with combined progress.
     pub fn download_model(
         &mut self,
         model_id: &str,
@@ -329,29 +330,78 @@ async fn download_single_file(
         .await
         .map_err(|e| format!("Failed to create file: {}", e))?;
 
-    while let Some(chunk_result) = stream.next().await {
-        if cancel_flag.load(Ordering::SeqCst) {
-            drop(file);
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Err("Cancelled".to_string());
+    let transfer_result: Result<(), String> = async {
+        while let Some(chunk_result) = stream.next().await {
+            if cancel_flag.load(Ordering::SeqCst) {
+                return Err("Cancelled".to_string());
+            }
+
+            let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| format!("Write error: {}", e))?;
         }
 
-        let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
-        file.write_all(&chunk)
+        file.flush()
             .await
-            .map_err(|e| format!("Write error: {}", e))?;
+            .map_err(|e| format!("Flush error: {}", e))?;
+        Ok(())
+    }
+    .await;
+
+    if let Err(error) = transfer_result {
+        drop(file);
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(error);
     }
 
-    file.flush()
-        .await
-        .map_err(|e| format!("Flush error: {}", e))?;
     drop(file);
 
-    tokio::fs::rename(&tmp_path, dest)
-        .await
-        .map_err(|e| format!("Rename error: {}", e))?;
+    if let Err(error) = tokio::fs::rename(&tmp_path, dest).await {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(format!("Rename error: {}", error));
+    }
 
     Ok(())
+}
+
+/// Remove abandoned OPUS-MT staging directories and temporary files. A
+/// completed model directory is never touched.
+fn cleanup_stale_downloads(models_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(models_dir) else {
+        return;
+    };
+
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let is_staging_dir = path.is_dir() && name.starts_with(".staging-");
+        let is_temp_file = path.is_file() && name.ends_with(".download");
+
+        if (is_staging_dir || is_temp_file)
+            && crate::stt::local_engines::downloader::is_stale_download(&path)
+        {
+            let result = if is_staging_dir {
+                std::fs::remove_dir_all(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+
+            match result {
+                Ok(()) => removed += 1,
+                Err(error) => log::warn!(
+                    "Failed to remove stale OPUS-MT artifact {}: {}",
+                    path.display(),
+                    error
+                ),
+            }
+        }
+    }
+
+    if removed > 0 {
+        log::info!("Removed {} stale OPUS-MT download artifact(s)", removed);
+    }
 }
 
 /// Emit an error status event with the error message.

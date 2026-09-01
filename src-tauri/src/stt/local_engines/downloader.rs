@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -15,6 +16,19 @@ pub struct DownloadProgress {
     pub total_bytes: u64,
     pub percent: f32,
     pub status: String, // "downloading" | "verifying" | "complete" | "error" | "cancelled"
+}
+
+/// Treat abandoned download artifacts as stale after a full day. This keeps
+/// an interrupted multi-gigabyte model download from consuming disk forever,
+/// while avoiding removal of a legitimately slow download on startup.
+pub fn is_stale_download(path: &Path) -> bool {
+    const STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
+
+    std::fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .and_then(|modified| modified.elapsed().map_err(std::io::Error::other))
+        .map(|age| age >= STALE_AFTER)
+        .unwrap_or(false)
 }
 
 /// Download a file with progress reporting and optional SHA256 verification.
@@ -79,30 +93,42 @@ pub async fn download_file(
 
     emit(0, total_size, "downloading");
 
-    while let Some(chunk_result) = stream.next().await {
+    let transfer_result: Result<(), String> = async {
+        while let Some(chunk_result) = stream.next().await {
+            if cancel_flag.load(Ordering::SeqCst) {
+                return Err("Download cancelled".to_string());
+            }
+
+            let chunk = chunk_result.map_err(|e| format!("Download stream error: {}", e))?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| format!("Failed to write to file: {}", e))?;
+            hasher.update(&chunk);
+            downloaded += chunk.len() as u64;
+
+            // Emit progress every ~100 KB to avoid flooding
+            if downloaded % 102_400 < chunk.len() as u64 || downloaded == total_size {
+                emit(downloaded, total_size, "downloading");
+            }
+        }
+
+        file.flush()
+            .await
+            .map_err(|e| format!("Failed to flush file: {}", e))?;
+        Ok(())
+    }
+    .await;
+
+    if let Err(error) = transfer_result {
+        drop(file);
+        let _ = tokio::fs::remove_file(&tmp_path).await;
         if cancel_flag.load(Ordering::SeqCst) {
-            drop(file);
-            let _ = tokio::fs::remove_file(&tmp_path).await;
             emit(downloaded, total_size, "cancelled");
             return Err("Download cancelled".to_string());
         }
-
-        let chunk = chunk_result.map_err(|e| format!("Download stream error: {}", e))?;
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| format!("Failed to write to file: {}", e))?;
-        hasher.update(&chunk);
-        downloaded += chunk.len() as u64;
-
-        // Emit progress every ~100 KB to avoid flooding
-        if downloaded % 102_400 < chunk.len() as u64 || downloaded == total_size {
-            emit(downloaded, total_size, "downloading");
-        }
+        return Err(error);
     }
 
-    file.flush()
-        .await
-        .map_err(|e| format!("Failed to flush file: {}", e))?;
     drop(file);
 
     // Verify SHA256 if a hash is provided
@@ -121,9 +147,10 @@ pub async fn download_file(
     }
 
     // Rename temp file to final destination
-    tokio::fs::rename(&tmp_path, dest)
-        .await
-        .map_err(|e| format!("Failed to rename temp file: {}", e))?;
+    if let Err(error) = tokio::fs::rename(&tmp_path, dest).await {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(format!("Failed to rename temp file: {}", error));
+    }
 
     // NOTE: We intentionally do NOT emit "complete" here.
     // The caller (ModelManager::download_model) handles the final status
