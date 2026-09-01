@@ -24,6 +24,7 @@ import type {
   PartyAudioConfig,
   STTProviderType,
 } from "../lib/types";
+import { DEFAULT_REMOTE_STT_PROVIDER, REMOTE_ONLY } from "../lib/buildMode";
 import {
   Mic,
   Volume2,
@@ -226,7 +227,7 @@ export function MeetingAudioSettings() {
       role: "You",
       device_id: micDeviceId ?? "default",
       is_input_device: true,
-      stt_provider: "web_speech",
+      stt_provider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "web_speech",
     },
     them: {
       role: "Them",
@@ -248,7 +249,7 @@ export function MeetingAudioSettings() {
     loadDevices();
     loadSessions();
     checkApiKeys();
-    loadLocalEngines();
+    if (!REMOTE_ONLY) loadLocalEngines();
   }, []);
 
   // Device monitor: runs for the entire component lifetime, independent of recording state.
@@ -365,6 +366,16 @@ export function MeetingAudioSettings() {
     ...devices.inputs.map((d) => ({ device: d, group: "Microphones" })),
     ...devices.outputs.map((d) => ({ device: d, group: "Speakers / Output" })),
   ];
+  const availablePresets = REMOTE_ONLY
+    ? BUILT_IN_PRESETS.filter(
+        (preset) =>
+          !preset.requiresDownload &&
+          preset.you.stt !== "web_speech" &&
+          preset.them.stt !== "web_speech" &&
+          preset.you.stt !== "windows_native" &&
+          preset.them.stt !== "windows_native"
+      )
+    : BUILT_IN_PRESETS;
 
   return (
     <div className="flex flex-col gap-4">
@@ -375,7 +386,7 @@ export function MeetingAudioSettings() {
           <span className="mr-1 shrink-0 text-meta font-semibold uppercase tracking-wider text-muted-foreground/60">
             Presets
           </span>
-          {BUILT_IN_PRESETS.map((preset) => (
+          {availablePresets.map((preset) => (
             <button
               key={preset.name}
               onClick={() => handlePresetSelect(preset)}
@@ -878,6 +889,7 @@ function ProviderSelect({
   }
 
   function isAvailable(opt: typeof STT_OPTIONS[0]): boolean {
+    if (REMOTE_ONLY && !opt.isCloud) return false;
     // Don't show providers that require downloads/keys even if currently selected
     if (opt.inputOnly && !isInput) return false;
     if (opt.requiresDownload) return isLocalEngineReady(opt.requiresDownload);
@@ -918,7 +930,12 @@ function ProviderSelect({
 
     const fallback = findExclusiveFallback();
     if (!fallback) {
-      showToast("No fallback STT engine available. Configure an API key or download a local model first.", "error");
+      showToast(
+        REMOTE_ONLY
+          ? "No cloud STT provider is available. Configure an API key in Settings first."
+          : "No fallback STT engine available. Configure an API key or download a local model first.",
+        "error"
+      );
       setStealTarget(null);
       return;
     }
@@ -952,6 +969,11 @@ function ProviderSelect({
   const enginesLoadedRef = useRef(false);
 
   useEffect(() => {
+    if (REMOTE_ONLY) {
+      const currentOpt = STT_OPTIONS.find((o) => o.value === value);
+      if (!currentOpt || !currentOpt.isCloud) onChange(DEFAULT_REMOTE_STT_PROVIDER);
+      return;
+    }
     if (!enginesLoadedRef.current) {
       if (localEngines.length > 0) enginesLoadedRef.current = true;
       return; // Skip fallback on initial load

@@ -9,6 +9,7 @@ import {
 } from "../../lib/ipc";
 import { useAudioLevel } from "../../hooks/useAudioLevel";
 import type { AudioDevice, AudioDeviceList, MeetingAudioConfig } from "../../lib/types";
+import { DEFAULT_REMOTE_STT_PROVIDER, REMOTE_ONLY } from "../../lib/buildMode";
 import {
   Mic,
   Volume2,
@@ -50,13 +51,13 @@ export function AudioSetupStep() {
       role: "You",
       device_id: micDeviceId ?? "default",
       is_input_device: true,
-      stt_provider: "web_speech",
+      stt_provider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "web_speech",
     },
     them: {
       role: "Them",
       device_id: systemDeviceId ?? "default",
       is_input_device: false,
-      stt_provider: "whisper_cpp",
+      stt_provider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "whisper_cpp",
     },
     recording_enabled: false,
     preset_name: null,

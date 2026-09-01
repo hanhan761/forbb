@@ -5,6 +5,7 @@ import { useConfigStore } from "../../stores/configStore";
 import { hasApiKey } from "../../lib/ipc";
 import { LocalModelManager } from "../../settings/LocalModelManager";
 import type { STTProviderType, MeetingAudioConfig } from "../../lib/types";
+import { DEFAULT_REMOTE_STT_PROVIDER, REMOTE_ONLY, isRemoteSttProvider } from "../../lib/buildMode";
 import {
   Globe,
   Server,
@@ -71,10 +72,10 @@ export function STTSetupStep() {
   const setMeetingAudioConfig = useConfigStore((s) => s.setMeetingAudioConfig);
 
   const [youSTT, setYouSTT] = useState<STTProviderType>(
-    meetingAudioConfig?.you.stt_provider ?? "web_speech"
+    meetingAudioConfig?.you.stt_provider ?? (REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "web_speech")
   );
   const [themSTT, setThemSTT] = useState<STTProviderType>(
-    meetingAudioConfig?.them.stt_provider ?? "whisper_cpp"
+    meetingAudioConfig?.them.stt_provider ?? (REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "whisper_cpp")
   );
   const [keyStatus, setKeyStatus] = useState<Record<string, boolean>>({});
 
@@ -97,6 +98,16 @@ export function STTSetupStep() {
 
   // Save selection to config when it changes
   useEffect(() => {
+    if (!REMOTE_ONLY || !meetingAudioConfig) return;
+    if (!isRemoteSttProvider(meetingAudioConfig.you.stt_provider)) {
+      setYouSTT(DEFAULT_REMOTE_STT_PROVIDER);
+    }
+    if (!isRemoteSttProvider(meetingAudioConfig.them.stt_provider)) {
+      setThemSTT(DEFAULT_REMOTE_STT_PROVIDER);
+    }
+  }, [meetingAudioConfig]);
+
+  useEffect(() => {
     if (!meetingAudioConfig) return;
     const updated: MeetingAudioConfig = {
       ...meetingAudioConfig,
@@ -106,6 +117,10 @@ export function STTSetupStep() {
     };
     setMeetingAudioConfig(updated);
   }, [youSTT, themSTT]);
+
+  const visibleProviders = REMOTE_ONLY
+    ? PROVIDERS.filter((provider) => provider.requiresKey)
+    : PROVIDERS;
 
   return (
     <div className="flex flex-col items-center">
@@ -125,9 +140,13 @@ export function STTSetupStep() {
         {/* Recommended desktop companion setup */}
         <div className="rounded-xl border border-success/20 bg-success/5 px-4 py-3">
           <p className="text-xs text-success leading-relaxed">
-            <strong>Recommended (Local):</strong> Whisper.cpp for Them reads the
-            selected system output through WASAPI loopback. Download Tiny or
-            Base below; no meeting input or API key is required.
+            {REMOTE_ONLY ? (
+              <><strong>Remote API mode:</strong> both parties' audio is sent to the selected cloud STT provider. Add an API key in Settings → STT.</>
+            ) : (
+              <><strong>Recommended (Local):</strong> Whisper.cpp for Them reads the
+              selected system output through WASAPI loopback. Download Tiny or
+              Base below; no meeting input or API key is required.</>
+            )}
           </p>
         </div>
 
@@ -140,7 +159,7 @@ export function STTSetupStep() {
             STT Provider
           </label>
           <div className="grid grid-cols-1 gap-2">
-            {PROVIDERS.map((p) => (
+            {visibleProviders.map((p) => (
               <ProviderButton
                 key={p.value}
                 provider={p}
@@ -161,7 +180,7 @@ export function STTSetupStep() {
             STT Provider
           </label>
           <div className="grid grid-cols-1 gap-2">
-            {PROVIDERS.filter((p) => p.value !== "web_speech").map((p) => (
+            {visibleProviders.filter((p) => p.value !== "web_speech").map((p) => (
               <ProviderButton
                 key={p.value}
                 provider={p}
@@ -172,11 +191,11 @@ export function STTSetupStep() {
             ))}
           </div>
           <p className="mt-1 text-meta text-muted-foreground">
-            For Tencent Meeting/Teams, choose a local or cloud provider here;
+            For Tencent Meeting/Teams, choose a cloud provider here;
             the system output is captured by the desktop app and shown in the overlay.
           </p>
 
-          {themSTT === "whisper_cpp" && (
+          {!REMOTE_ONLY && themSTT === "whisper_cpp" && (
             <div className="mt-3 rounded-xl border border-border/30 bg-secondary/10 p-3">
               <p className="mb-2 text-xs font-medium text-foreground">
                 Whisper.cpp model

@@ -7,6 +7,7 @@ import {
 import { NEXQ_VERSION, NEXQ_BUILD_DATE, NEXQ_DEVELOPER } from "../lib/version";
 import { useUpdater } from "../hooks/useUpdater";
 import { open } from "@tauri-apps/plugin-shell";
+import { REMOTE_ONLY } from "../lib/buildMode";
 
 const GITHUB_URL = "https://github.com/VahidAlizadeh/NexQ";
 
@@ -207,8 +208,9 @@ export function AboutSettings() {
       {/* Footer */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-5">
         <p className="text-xs text-muted-foreground/60 leading-relaxed">
-          NexQ is an open desktop application. All processing can run locally
-          with Ollama or LM Studio, or optionally connect to cloud AI providers.
+          {REMOTE_ONLY
+            ? "This remote-only build keeps audio capture and meeting history local, and delegates AI inference to cloud APIs."
+            : "NexQ is an open desktop application. All processing can run locally with Ollama or LM Studio, or optionally connect to cloud AI providers."}
         </p>
       </div>
     </div>

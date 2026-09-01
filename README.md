@@ -67,6 +67,25 @@ For live interviews, follow the meeting platform, school, and local consent rule
 
 [Getting Started Guide](docs/user-guide/getting-started.md) | [All User Guides](docs/user-guide/)
 
+## Remote-only build
+
+NexQ also provides a smaller remote-only desktop build for machines that should not
+download or run local AI models. It keeps microphone/system-audio capture, the local
+SQLite meeting history, recording, and the UI on the device, while sending speech
+recognition, translation, and LLM requests to the configured cloud APIs. Document RAG
+uses local SQLite keyword search; Ollama embeddings are not included or started.
+
+Build it from source with:
+
+```bash
+npm install
+npm run build:remote
+```
+
+The original all-in-one build remains available with `npx tauri build`. The remote-only
+build requires API keys for the selected STT, translation, and LLM providers; those keys
+are stored through NexQ's credential manager and are not hard-coded into the app.
+
 ## Gemini Context Cache
 
 For users running NexQ on a laptop without a dedicated GPU, local embedding can add 2–5 seconds of latency per AI query. The **Gemini Context Cache** feature eliminates this entirely.
@@ -153,6 +172,7 @@ npx tauri build
 ```bash
 npm run dev       # Vite dev server only (port 5173)
 npm run build     # TypeScript check + Vite production build
+npm run build:remote # Remote-only Tauri installer without local AI features
 ```
 
 ## Windows SmartScreen

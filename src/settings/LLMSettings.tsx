@@ -13,6 +13,7 @@ import {
   listOpenRouterModels,
 } from "../lib/ipc";
 import type { CodexReasoningLevel, LLMProviderType, ModelInfo, OpenRouterModel } from "../lib/types";
+import { REMOTE_ONLY, isRemoteLlmProvider } from "../lib/buildMode";
 import { OpenRouterModelCatalog } from "./openrouter/OpenRouterModelCatalog";
 import {
   CheckCircle,
@@ -38,7 +39,12 @@ const PROVIDER_DISPLAY: Record<
   ollama: { label: "Ollama", description: "Local models via Ollama", requiresKey: false, isLocal: true },
   lm_studio: { label: "LM Studio", description: "Local models via LM Studio", requiresKey: false, isLocal: true },
   openai: { label: "OpenAI", description: "GPT-4o, GPT-4, etc.", requiresKey: true, isLocal: false },
-  qwen: { label: "Qwen (DashScope)", description: "Workspace API from .env", requiresKey: false, isLocal: false },
+  qwen: {
+    label: "Qwen (DashScope)",
+    description: REMOTE_ONLY ? "DashScope cloud API" : "Workspace API from .env",
+    requiresKey: REMOTE_ONLY,
+    isLocal: false,
+  },
   anthropic: { label: "Anthropic", description: "Claude Sonnet, Opus, Haiku", requiresKey: true, isLocal: false },
   groq: { label: "Groq", description: "Ultra-fast inference", requiresKey: true, isLocal: false },
   gemini: { label: "Google Gemini", description: "Gemini Pro, Flash", requiresKey: true, isLocal: false },
@@ -158,6 +164,13 @@ export function LLMSettings() {
   }, []);
 
   // Load API key when provider changes
+  useEffect(() => {
+    if (REMOTE_ONLY && !isRemoteLlmProvider(selectedProvider)) {
+      setSelectedProvider("qwen");
+      setSelectedModel("qwen-plus");
+    }
+  }, [selectedProvider]);
+
   useEffect(() => {
     const info = PROVIDER_DISPLAY[selectedProvider];
     if (info?.requiresKey) {
@@ -286,11 +299,19 @@ export function LLMSettings() {
 
   const info = PROVIDER_DISPLAY[selectedProvider];
   const requiresApiKey = info?.requiresKey ?? false;
-  const isLocal = info?.isLocal ?? false;
+  const isLocal = !REMOTE_ONLY && (info?.isLocal ?? false);
   const isCustom = selectedProvider === "custom";
+  const visibleProviders = REMOTE_ONLY
+    ? ALL_PROVIDERS.filter((provider) => !PROVIDER_DISPLAY[provider].isLocal)
+    : ALL_PROVIDERS;
 
   return (
     <div className="space-y-6">
+      {REMOTE_ONLY && (
+        <div className="rounded-xl border border-info/20 bg-info/5 px-4 py-3 text-xs text-info">
+          Remote-only build: local Codex, Ollama, and LM Studio are unavailable. Choose a cloud LLM API below.
+        </div>
+      )}
       {/* Active Provider + Model Banner */}
       <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-5 py-3.5">
         <Zap className="h-4 w-4 text-primary shrink-0" />
@@ -311,7 +332,7 @@ export function LLMSettings() {
       <div className="rounded-xl border border-border/30 bg-card/50 p-5">
         <h3 className="mb-3 text-sm font-semibold text-primary/80">Provider</h3>
         <div className="grid grid-cols-4 gap-2.5">
-          {ALL_PROVIDERS.map((pType) => {
+          {visibleProviders.map((pType) => {
             const display = PROVIDER_DISPLAY[pType];
             const isSelected = selectedProvider === pType;
             const isActive = llmProvider === pType;

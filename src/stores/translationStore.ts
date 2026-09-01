@@ -5,6 +5,7 @@ import type {
   TranslationDisplayMode,
   TranslationResult,
 } from "../lib/types";
+import { REMOTE_ONLY, isRemoteTranslationProvider } from "../lib/buildMode";
 import { setTranslationLanguages } from "../lib/ipc";
 
 const STORE_FILE = "translation-config.json";
@@ -83,8 +84,11 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
   batchProgress: null,
 
   setProvider: (provider) => {
-    set({ provider });
-    persistValue("provider", provider);
+    const resolved = REMOTE_ONLY && !isRemoteTranslationProvider(provider)
+      ? "llm" as TranslationProviderType
+      : provider;
+    set({ provider: resolved });
+    persistValue("provider", resolved);
   },
   setTargetLang: (lang) => {
     set({ targetLang: lang });
@@ -163,8 +167,15 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       const selectionToolbarEnabled = await store.get<boolean>("selectionToolbarEnabled");
       const cacheEnabled = await store.get<boolean>("cacheEnabled");
 
+      const providerMigrated = REMOTE_ONLY && !isRemoteTranslationProvider(provider ?? "");
+      const resolvedProvider = providerMigrated ? "llm" as TranslationProviderType : provider;
+      if (providerMigrated) {
+        await store.set("provider", resolvedProvider);
+        console.log("[translationStore] Remote-only: migrated translation provider to remote LLM");
+      }
+
       set({
-        ...(provider != null && { provider }),
+        ...(resolvedProvider != null && { provider: resolvedProvider }),
         ...(targetLang != null && { targetLang }),
         ...(sourceLang != null && { sourceLang }),
         ...(displayMode != null && { displayMode }),
@@ -183,7 +194,10 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       // Cross-window sync: when another window changes the store,
       // update this window's Zustand state automatically.
       store.onKeyChange<TranslationProviderType>("provider", (val) => {
-        if (val != null) set({ provider: val });
+        if (val != null) {
+          const resolved = REMOTE_ONLY && !isRemoteTranslationProvider(val) ? "llm" : val;
+          set({ provider: resolved });
+        }
       });
       store.onKeyChange<string>("targetLang", (val) => {
         if (val != null) set({ targetLang: val });

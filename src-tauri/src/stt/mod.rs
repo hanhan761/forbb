@@ -1,8 +1,12 @@
 pub mod deepgram;
+#[cfg(feature = "local-ai")]
 pub mod fbank;
+#[cfg(feature = "local-ai")]
 pub mod local_engines;
 pub mod provider;
+#[cfg(feature = "local-ai")]
 pub mod whisper_cpp;
+#[cfg(feature = "local-ai")]
 pub mod windows_native;
 pub mod word_diff;
 // Sub-PRD 9: Additional providers
@@ -10,8 +14,11 @@ pub mod azure_speech;
 pub mod groq_whisper;
 pub mod whisper_api;
 // STT Engine Overhaul: New streaming providers
+#[cfg(feature = "local-ai")]
 pub mod sherpa_sidecar;
+#[cfg(feature = "local-ai")]
 pub mod sherpa_offline;
+#[cfg(feature = "local-ai")]
 pub mod ort_streaming;
 // Pause-based segment merging for all STT providers
 pub mod segment_accumulator;
@@ -167,11 +174,17 @@ impl STTRouter {
             STTProviderType::WebSpeech => {
                 // WebSpeech is frontend-only — no Rust provider to instantiate.
                 // Just record the type so the pipeline knows to skip Rust STT.
+                #[cfg(not(feature = "local-ai"))]
+                return Err("Web Speech is disabled in the remote-only build; choose a cloud STT provider".to_string());
+                #[cfg(feature = "local-ai")]
+                {
                 self.active_provider = None;
                 self.active_type = Some(provider_type);
                 log::info!("STTRouter: WebSpeech selected (frontend-only, no Rust provider)");
                 return Ok(());
+                }
             }
+            #[cfg(feature = "local-ai")]
             STTProviderType::WhisperCpp => {
                 // WhisperCpp is created per-party with a specific model path.
                 // In the legacy single-provider path, just record the type.
@@ -180,6 +193,7 @@ impl STTRouter {
                 log::info!("STTRouter: WhisperCpp selected (provider created per-party)");
                 return Ok(());
             }
+            #[cfg(feature = "local-ai")]
             STTProviderType::WindowsNative => {
                 let mut p = windows_native::WindowsNativeSTT::new();
                 p.set_language(&self.language);
@@ -222,12 +236,21 @@ impl STTRouter {
                 p.set_language(&self.language); // must be after set_config — set_config overwrites language
                 Box::new(p)
             }
+            #[cfg(feature = "local-ai")]
             STTProviderType::SherpaOnnx | STTProviderType::OrtStreaming | STTProviderType::ParakeetTdt => {
                 // These are created per-party in start_capture_per_party, not via STTRouter.
                 self.active_provider = None;
                 log::info!("STTRouter: {:?} selected (provider created per-party)", provider_type);
                 self.active_type = Some(provider_type);
                 return Ok(());
+            }
+            #[cfg(not(feature = "local-ai"))]
+            STTProviderType::WhisperCpp
+            | STTProviderType::WindowsNative
+            | STTProviderType::SherpaOnnx
+            | STTProviderType::OrtStreaming
+            | STTProviderType::ParakeetTdt => {
+                return Err("Local STT providers are disabled in the remote-only build; choose a cloud STT provider".to_string());
             }
         };
 
@@ -470,13 +493,20 @@ impl STTRouter {
         match provider_type {
             STTProviderType::WebSpeech => {
                 // WebSpeech is always available in Chromium-based WebView
-                Ok(true)
+                #[cfg(not(feature = "local-ai"))]
+                return Err("Web Speech is disabled in the remote-only build".to_string());
+                #[cfg(feature = "local-ai")]
+                {
+                    Ok(true)
+                }
             }
+            #[cfg(feature = "local-ai")]
             STTProviderType::WhisperCpp => {
                 // WhisperCpp engine is always available; model availability
                 // is checked at capture time.
                 Ok(true)
             }
+            #[cfg(feature = "local-ai")]
             STTProviderType::WindowsNative => {
                 let provider = windows_native::WindowsNativeSTT::new();
                 provider
@@ -532,10 +562,19 @@ impl STTRouter {
                     .await
                     .map_err(|e| format!("Connection test failed: {}", e))
             }
+            #[cfg(feature = "local-ai")]
             STTProviderType::SherpaOnnx | STTProviderType::OrtStreaming | STTProviderType::ParakeetTdt => {
                 // Local engines — always "available" if a model is downloaded.
                 // Model availability is checked at capture time in create_stt_provider_for_party.
                 Ok(true)
+            }
+            #[cfg(not(feature = "local-ai"))]
+            STTProviderType::WhisperCpp
+            | STTProviderType::WindowsNative
+            | STTProviderType::SherpaOnnx
+            | STTProviderType::OrtStreaming
+            | STTProviderType::ParakeetTdt => {
+                Err("Local STT providers are disabled in the remote-only build".to_string())
             }
         }
     }

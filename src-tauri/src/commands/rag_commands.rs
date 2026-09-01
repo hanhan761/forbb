@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tauri::{command, AppHandle, Emitter, State};
 use crate::intelligence::IntelligenceEngine;
-use crate::rag::{self, RagManager, config::RagConfig, embedder::OllamaEmbedder};
+use crate::rag::{self, RagManager, config::RagConfig};
+#[cfg(feature = "local-ai")]
+use crate::rag::embedder::OllamaEmbedder;
 use crate::state::AppState;
 
 #[command]
@@ -223,6 +225,7 @@ pub async fn update_rag_config(
 }
 
 #[command]
+#[cfg(feature = "local-ai")]
 pub async fn test_ollama_embedding_connection(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -240,6 +243,13 @@ pub async fn test_ollama_embedding_connection(
 }
 
 #[command]
+#[cfg(not(feature = "local-ai"))]
+pub async fn test_ollama_embedding_connection() -> Result<String, String> {
+    Err("Ollama embeddings are disabled in the remote-only build; keyword RAG is enabled".to_string())
+}
+
+#[command]
+#[cfg(feature = "local-ai")]
 pub async fn pull_embedding_model(
     model: String,
     app_handle: AppHandle,
@@ -253,6 +263,12 @@ pub async fn pull_embedding_model(
     };
 
     OllamaEmbedder::pull_model(&base_url, &model, app_handle).await
+}
+
+#[command]
+#[cfg(not(feature = "local-ai"))]
+pub async fn pull_embedding_model(_model: String, _app_handle: AppHandle) -> Result<(), String> {
+    Err("Ollama embedding downloads are disabled in the remote-only build".to_string())
 }
 
 /// Remove the RAG index for a single file without touching other files.

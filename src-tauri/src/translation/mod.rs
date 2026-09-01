@@ -2,8 +2,11 @@
 pub mod microsoft;
 pub mod google;
 pub mod deepl;
+#[cfg(feature = "local-ai")]
 pub mod opus_mt;
+#[cfg(feature = "local-ai")]
 pub mod opus_mt_registry;
+#[cfg(feature = "local-ai")]
 pub mod opus_mt_manager;
 pub mod llm_provider;
 
@@ -193,8 +196,10 @@ pub struct TranslationRouter {
     // Default target/source language — set by frontend, used as fallback
     default_target_lang: String,
     default_source_lang: Option<String>,
-    // OPUS-MT models directory and active model
+    // OPUS-MT models directory and active model (full build only)
+    #[cfg(feature = "local-ai")]
     opus_mt_models_dir: Option<std::path::PathBuf>,
+    #[cfg(feature = "local-ai")]
     opus_mt_active_model_id: Option<String>,
 }
 
@@ -211,7 +216,9 @@ impl TranslationRouter {
             deepl_api_key: None,
             default_target_lang: "en".to_string(),
             default_source_lang: None,
+            #[cfg(feature = "local-ai")]
             opus_mt_models_dir: None,
+            #[cfg(feature = "local-ai")]
             opus_mt_active_model_id: None,
         }
     }
@@ -249,10 +256,12 @@ impl TranslationRouter {
         self.default_source_lang.as_deref()
     }
 
+    #[cfg(feature = "local-ai")]
     pub fn set_opus_mt_models_dir(&mut self, path: std::path::PathBuf) {
         self.opus_mt_models_dir = Some(path);
     }
 
+    #[cfg(feature = "local-ai")]
     pub fn set_opus_mt_active_model(&mut self, model_id: Option<String>) {
         self.opus_mt_active_model_id = model_id;
     }
@@ -278,6 +287,7 @@ impl TranslationRouter {
                     .ok_or_else(|| TranslationError::NoApiKey("deepl".into()))?;
                 Box::new(deepl::DeepLTranslator::new(key))
             }
+            #[cfg(feature = "local-ai")]
             TranslationProviderType::OpusMt => {
                 let mut translator = opus_mt::OpusMtTranslator::new();
                 if let Some(dir) = &self.opus_mt_models_dir {
@@ -289,6 +299,12 @@ impl TranslationRouter {
                     translator.set_active_model_id(Some(active_id.clone()));
                 }
                 Box::new(translator)
+            }
+            #[cfg(not(feature = "local-ai"))]
+            TranslationProviderType::OpusMt => {
+                return Err(TranslationError::NotConfigured(
+                    "OPUS-MT is disabled in the remote-only build".to_string(),
+                ));
             }
             TranslationProviderType::Llm => {
                 Box::new(llm_provider::LlmTranslator::new())

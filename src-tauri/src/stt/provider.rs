@@ -161,7 +161,7 @@ pub struct STTProviderInfo {
 
 /// List of available providers with metadata.
 pub fn list_available_providers() -> Vec<STTProviderInfo> {
-    vec![
+    let providers = vec![
         STTProviderInfo {
             provider_type: "web_speech".to_string(),
             name: "Web Speech API".to_string(),
@@ -365,5 +365,11 @@ pub fn list_available_providers() -> Vec<STTProviderInfo> {
                 "uk".to_string(),
             ],
         },
-    ]
+    ];
+
+    #[cfg(not(feature = "local-ai"))]
+    return providers.into_iter().filter(|provider| !provider.is_local).collect();
+
+    #[cfg(feature = "local-ai")]
+    providers
 }

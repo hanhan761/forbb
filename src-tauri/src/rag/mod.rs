@@ -45,6 +45,7 @@ impl RagManager {
     /// Sets up the Ollama embedder and optionally creates a TranscriptIndexer
     /// if `config.include_transcript` is true.
     pub fn new(config: RagConfig) -> Self {
+        let config = normalize_config_for_build(config);
         let embedder = OllamaEmbedder::new(&config.ollama_url);
         let transcript_indexer = if config.include_transcript {
             Some(TranscriptIndexer::new(config.chunk_size))
@@ -76,6 +77,7 @@ impl RagManager {
     /// Update the configuration. Recreates the embedder and toggles
     /// the transcript indexer as needed.
     pub fn update_config(&mut self, config: RagConfig) {
+        let config = normalize_config_for_build(config);
         self.embedder = OllamaEmbedder::new(&config.ollama_url);
         if config.include_transcript && self.transcript_indexer.is_none() {
             self.transcript_indexer = Some(TranscriptIndexer::new(config.chunk_size));
@@ -108,6 +110,11 @@ impl RagManager {
         config: &RagConfig,
         embedder_url: &str,
     ) -> Result<usize, String> {
+        #[cfg(not(feature = "local-ai"))]
+        if config.search_mode != "keyword" {
+            return Err("Semantic RAG is disabled in the remote-only build; use keyword search".to_string());
+        }
+
         let embedder = OllamaEmbedder::new(embedder_url);
 
         // Phase 1: Chunk the text (no DB needed)
@@ -278,6 +285,11 @@ impl RagManager {
         embedder_url: &str,
         model: &str,
     ) -> Result<Vec<ScoredChunk>, String> {
+        #[cfg(not(feature = "local-ai"))]
+        if config.search_mode != "keyword" {
+            return Err("Semantic RAG is disabled in the remote-only build; use keyword search".to_string());
+        }
+
         let embedder = OllamaEmbedder::new(embedder_url);
 
         // Embed the query (needed for semantic and hybrid modes)
@@ -323,6 +335,18 @@ impl RagManager {
         rag_db::get_index_status(conn)
             .map_err(|e| format!("Failed to get RAG index status: {}", e))
     }
+}
+
+/// Keep persisted configs from re-enabling a local embedding request in a
+/// remote-only build. Keyword search still indexes documents locally with
+/// SQLite FTS5 and sends only the selected chunks to the configured remote LLM.
+#[cfg_attr(feature = "local-ai", allow(unused_mut))]
+fn normalize_config_for_build(mut config: RagConfig) -> RagConfig {
+    #[cfg(not(feature = "local-ai"))]
+    {
+        config.search_mode = "keyword".to_string();
+    }
+    config
 }
 
 /// Load all embeddings from the database into memory for vector search.

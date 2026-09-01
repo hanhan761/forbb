@@ -14,6 +14,12 @@ import type {
   AudioMode,
   AIScenario,
 } from "../lib/types";
+import {
+  DEFAULT_REMOTE_STT_PROVIDER,
+  REMOTE_ONLY,
+  isRemoteLlmProvider,
+  isRemoteSttProvider,
+} from "../lib/buildMode";
 
 const DEFAULT_DEEPGRAM_CONFIG: DeepgramConfig = {
   model: "nova-3",
@@ -76,6 +82,21 @@ async function persistValue(key: string, value: unknown): Promise<void> {
   } catch (err) {
     console.error(`[configStore] Failed to persist "${key}":`, err);
   }
+}
+
+function normalizeMeetingAudioConfig(config: MeetingAudioConfig): MeetingAudioConfig {
+  if (!REMOTE_ONLY) return config;
+
+  const normalizeParty = (party: MeetingAudioConfig["you"]): MeetingAudioConfig["you"] =>
+    isRemoteSttProvider(party.stt_provider)
+      ? { ...party, local_model_id: undefined }
+      : { ...party, stt_provider: DEFAULT_REMOTE_STT_PROVIDER, local_model_id: undefined };
+
+  return {
+    ...config,
+    you: normalizeParty(config.you),
+    them: normalizeParty(config.them),
+  };
 }
 
 interface ConfigState {
@@ -256,7 +277,7 @@ interface ConfigState {
 
 export const useConfigStore = create<ConfigState>((set) => ({
   theme: "dark",
-  sttProvider: "windows_native",
+  sttProvider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "windows_native",
   sttLanguage: "en-US",
   llmProvider: "qwen",
   llmModel: "qwen-plus",
@@ -335,8 +356,11 @@ export const useConfigStore = create<ConfigState>((set) => ({
     persistValue("theme", theme);
   },
   setSTTProvider: (provider) => {
-    set({ sttProvider: provider });
-    persistValue("sttProvider", provider);
+    const resolved = REMOTE_ONLY && !isRemoteSttProvider(provider)
+      ? DEFAULT_REMOTE_STT_PROVIDER
+      : provider;
+    set({ sttProvider: resolved });
+    persistValue("sttProvider", resolved);
   },
   setSTTLanguage: (language) => {
     set({ sttLanguage: language });
@@ -348,8 +372,11 @@ export const useConfigStore = create<ConfigState>((set) => ({
     );
   },
   setLLMProvider: (provider) => {
-    set({ llmProvider: provider });
-    persistValue("llmProvider", provider);
+    const resolved = REMOTE_ONLY && !isRemoteLlmProvider(provider)
+      ? "qwen"
+      : provider;
+    set({ llmProvider: resolved });
+    persistValue("llmProvider", resolved);
   },
   setLLMModel: (model) => {
     set({ llmModel: model });
@@ -372,17 +399,18 @@ export const useConfigStore = create<ConfigState>((set) => ({
     persistValue("recordingEnabled", enabled);
   },
   setMeetingAudioConfig: (config) => {
-    set({ meetingAudioConfig: config });
-    persistValue("meetingAudioConfig", config);
+    const resolvedConfig = normalizeMeetingAudioConfig(config);
+    set({ meetingAudioConfig: resolvedConfig });
+    persistValue("meetingAudioConfig", resolvedConfig);
     // Keep legacy fields in sync for backward compatibility
     set({
-      micDeviceId: config.you.device_id || null,
-      systemDeviceId: config.them.device_id || null,
-      recordingEnabled: config.recording_enabled,
+      micDeviceId: resolvedConfig.you.device_id || null,
+      systemDeviceId: resolvedConfig.them.device_id || null,
+      recordingEnabled: resolvedConfig.recording_enabled,
     });
-    persistValue("micDeviceId", config.you.device_id || null);
-    persistValue("systemDeviceId", config.them.device_id || null);
-    persistValue("recordingEnabled", config.recording_enabled);
+    persistValue("micDeviceId", resolvedConfig.you.device_id || null);
+    persistValue("systemDeviceId", resolvedConfig.them.device_id || null);
+    persistValue("recordingEnabled", resolvedConfig.recording_enabled);
   },
   saveCustomPreset: (name) => {
     const state = useConfigStore.getState();
@@ -749,13 +777,13 @@ export const useConfigStore = create<ConfigState>((set) => ({
             role: "You",
             device_id: micDeviceId ?? "default",
             is_input_device: true,
-            stt_provider: "web_speech",
+            stt_provider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "web_speech",
           },
           them: {
             role: "Them",
             device_id: systemDeviceId ?? "default",
             is_input_device: false,
-            stt_provider: "whisper_cpp",
+            stt_provider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "whisper_cpp",
           },
           recording_enabled: recordingEnabled ?? false,
           preset_name: null,
@@ -796,12 +824,54 @@ export const useConfigStore = create<ConfigState>((set) => ({
         }
       }
 
+      // Remote-only builds cannot execute browser, Windows, Whisper, Sherpa,
+      // ORT, or Parakeet STT. Normalize old persisted configs before they can
+      // reach the capture pipeline, and remove stale local model references.
+      if (REMOTE_ONLY && resolvedMeetingConfig) {
+        let migrated = false;
+        for (const party of ["you", "them"] as const) {
+          const current = resolvedMeetingConfig[party];
+          if (!isRemoteSttProvider(current.stt_provider)) {
+            resolvedMeetingConfig[party] = {
+              ...current,
+              stt_provider: DEFAULT_REMOTE_STT_PROVIDER,
+              local_model_id: undefined,
+            };
+            migrated = true;
+          } else if (current.local_model_id) {
+            resolvedMeetingConfig[party] = { ...current, local_model_id: undefined };
+            migrated = true;
+          }
+        }
+        if (migrated) {
+          await store.set("meetingAudioConfig", resolvedMeetingConfig);
+          console.log("[configStore] Remote-only: migrated meeting STT to cloud providers");
+        }
+      }
+
       // Migrate top-level sttProvider away from whisper_cpp (first load only)
       let resolvedSttProvider = sttProvider;
       if (!alreadyLoaded && (!resolvedSttProvider || (resolvedSttProvider as string) === "whisper_cpp")) {
-        resolvedSttProvider = "windows_native" as STTProviderType;
+        resolvedSttProvider = REMOTE_ONLY
+          ? DEFAULT_REMOTE_STT_PROVIDER
+          : "windows_native" as STTProviderType;
         await store.set("sttProvider", resolvedSttProvider);
-        console.log("[configStore] Migrated top-level sttProvider to windows_native");
+        console.log(`[configStore] Migrated top-level sttProvider to ${resolvedSttProvider}`);
+      } else if (REMOTE_ONLY && !isRemoteSttProvider(resolvedSttProvider ?? "")) {
+        resolvedSttProvider = DEFAULT_REMOTE_STT_PROVIDER;
+        await store.set("sttProvider", resolvedSttProvider);
+        console.log("[configStore] Remote-only: migrated top-level sttProvider to deepgram");
+      }
+
+      const llmProviderMigrated = REMOTE_ONLY && !isRemoteLlmProvider(llmProvider ?? "");
+      const resolvedLlmProvider = llmProviderMigrated
+        ? "qwen" as LLMProviderType
+        : llmProvider;
+      const resolvedLlmModel = llmProviderMigrated ? "qwen-plus" : llmModel;
+      if (llmProviderMigrated) {
+        await store.set("llmProvider", resolvedLlmProvider);
+        await store.set("llmModel", resolvedLlmModel);
+        console.log("[configStore] Remote-only: migrated LLM provider to qwen");
       }
 
       // If no meetingAudioConfig was found after all migrations, create a default (first load only)
@@ -811,29 +881,29 @@ export const useConfigStore = create<ConfigState>((set) => ({
             role: "You",
             device_id: "default",
             is_input_device: true,
-            stt_provider: "web_speech",
+            stt_provider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "web_speech",
           },
           them: {
             role: "Them",
             device_id: "default",
             is_input_device: false,
-            stt_provider: "whisper_cpp",
+            stt_provider: REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "whisper_cpp",
           },
           recording_enabled: false,
           preset_name: null,
         };
         await store.set("meetingAudioConfig", resolvedMeetingConfig);
-        console.log("[configStore] Created default meetingAudioConfig (Web Speech + local Whisper.cpp)");
+        console.log(`[configStore] Created default meetingAudioConfig (${REMOTE_ONLY ? "cloud STT" : "Web Speech + local Whisper.cpp"})`);
       }
 
       set((state) => ({
         ...state,
         _loaded: true,
         ...(theme != null && { theme }),
-        ...(sttProvider != null && { sttProvider }),
+        ...(resolvedSttProvider != null && { sttProvider: resolvedSttProvider }),
         ...(sttLanguage != null && { sttLanguage }),
-        ...(llmProvider != null && { llmProvider }),
-        ...(llmModel != null && { llmModel }),
+        ...(resolvedLlmProvider != null && { llmProvider: resolvedLlmProvider }),
+        ...(resolvedLlmModel != null && { llmModel: resolvedLlmModel }),
         llmReasoningLevel: llmReasoningLevel ?? "medium",
         ...(micDeviceId !== undefined && { micDeviceId }),
         ...(systemDeviceId !== undefined && { systemDeviceId }),

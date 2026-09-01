@@ -35,6 +35,7 @@ use commands::meeting_commands;
 // == MODULE COMMANDS: settings ==
 use commands::settings_commands;
 // == MODULE COMMANDS: models ==
+#[cfg(feature = "local-ai")]
 use commands::model_commands;
 // == MODULE COMMANDS: interview preparation ==
 use commands::prepare_commands;
@@ -49,6 +50,7 @@ use commands::recording_commands;
 // == MODULE COMMANDS: translation ==
 use commands::translation_commands;
 // == MODULE COMMANDS: translation models ==
+#[cfg(feature = "local-ai")]
 use commands::translation_model_commands;
 // == MODULE COMMANDS: tray ==
 use commands::tray_commands;
@@ -218,11 +220,14 @@ pub fn run() {
                 }
             }
 
-            // -- Initialize ModelManager --
-            let models_dir = app_data_dir.join("models");
-            let model_mgr = stt::local_engines::ModelManager::new(models_dir);
-            app_state.model_manager = Some(Arc::new(Mutex::new(model_mgr)));
-            log::info!("Model manager initialized");
+            // -- Initialize local model manager (full build only) --
+            #[cfg(feature = "local-ai")]
+            {
+                let models_dir = app_data_dir.join("models");
+                let model_mgr = stt::local_engines::ModelManager::new(models_dir);
+                app_state.model_manager = Some(Arc::new(Mutex::new(model_mgr)));
+                log::info!("Model manager initialized");
+            }
 
             // -- Initialize CredentialManager --
             let cred_mgr = credentials::CredentialManager::new();
@@ -304,11 +309,13 @@ pub fn run() {
             // -- Initialize LLMRouter with auto-detected provider --
             let mut llm_router = llm::LLMRouter::new();
 
-            // Prefer the workspace-provided Qwen API when available. Local
-            // providers remain the fallback for machines without the .env key.
+            // Prefer the workspace-provided Qwen API when available. The full
+            // build can fall back to local providers; remote-only must not.
+            #[cfg(feature = "local-ai")]
             let has_qwen_key = std::env::var("DASHSCOPE_API_KEY")
                 .map(|key| !key.trim().is_empty())
                 .unwrap_or(false);
+            #[cfg(feature = "local-ai")]
             let default_provider = if has_qwen_key {
                 "qwen"
             } else if llm::codex::is_available() {
@@ -316,6 +323,8 @@ pub fn run() {
             } else {
                 "ollama"
             };
+            #[cfg(not(feature = "local-ai"))]
+            let default_provider = "qwen";
             let default_llm_config = llm::ProviderConfig {
                 provider_type: default_provider.to_string(),
                 api_key: None,
@@ -337,7 +346,7 @@ pub fn run() {
                     } else if default_provider == "codex" {
                         llm_router.set_active_model("codex-default".to_string());
                         log::info!("LLM router: local Codex app-server set as default provider");
-                    } else {
+                    } else if default_provider == "ollama" {
                         log::info!("LLM router: Ollama set as default provider");
                     }
                 }
@@ -355,29 +364,37 @@ pub fn run() {
             log::info!("Intelligence engine initialized");
 
             // -- Initialize TranslationRouter --
-            let opus_mt_dir = app_data_dir.join("models").join("opus_mt");
+            #[cfg_attr(not(feature = "local-ai"), allow(unused_mut))]
             let mut translation_router = translation::TranslationRouter::new();
+            #[cfg(feature = "local-ai")]
+            let opus_mt_dir = app_data_dir.join("models").join("opus_mt");
+            #[cfg(feature = "local-ai")]
             translation_router.set_opus_mt_models_dir(opus_mt_dir.clone());
             app_state.translation = Some(Arc::new(Mutex::new(translation_router)));
             log::info!("Translation router initialized");
 
-            // -- Initialize OPUS-MT ModelManager --
-            let opus_mt_mgr = translation::opus_mt_manager::OpusMtManager::new(opus_mt_dir);
-            // Sync the active model ID to the translation router
-            if let Some(active_id) = opus_mt_mgr.active_model_id() {
-                if let Some(tr) = &app_state.translation {
-                    if let Ok(mut router) = tr.lock() {
-                        router.set_opus_mt_active_model(Some(active_id.to_string()));
+            // -- Initialize OPUS-MT ModelManager (full build only) --
+            #[cfg(feature = "local-ai")]
+            {
+                let opus_mt_mgr = translation::opus_mt_manager::OpusMtManager::new(opus_mt_dir);
+                // Sync the active model ID to the translation router
+                if let Some(active_id) = opus_mt_mgr.active_model_id() {
+                    if let Some(tr) = &app_state.translation {
+                        if let Ok(mut router) = tr.lock() {
+                            router.set_opus_mt_active_model(Some(active_id.to_string()));
+                        }
                     }
                 }
+                app_state.opus_mt_manager = Some(Arc::new(Mutex::new(opus_mt_mgr)));
+                log::info!("OPUS-MT model manager initialized");
             }
-            app_state.opus_mt_manager = Some(Arc::new(Mutex::new(opus_mt_mgr)));
-            log::info!("OPUS-MT model manager initialized");
 
             app.manage(app_state);
 
-            // -- Auto-detect first Ollama model in background --
+            // -- Auto-detect first Ollama model in background (full build only) --
+            #[cfg(feature = "local-ai")]
             let auto_detect_app = app.handle().clone();
+            #[cfg(feature = "local-ai")]
             tauri::async_runtime::spawn(async move {
                 // Give Ollama a moment to be ready
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -639,9 +656,13 @@ pub fn run() {
             settings_commands::get_config,
             settings_commands::set_config,
             // == COMMANDS: models ==
+            #[cfg(feature = "local-ai")]
             model_commands::list_local_stt_engines,
+            #[cfg(feature = "local-ai")]
             model_commands::download_local_stt_model,
+            #[cfg(feature = "local-ai")]
             model_commands::cancel_model_download,
+            #[cfg(feature = "local-ai")]
             model_commands::delete_local_stt_model,
             // == COMMANDS: interview preparation ==
             prepare_commands::prepare_interview,
@@ -685,10 +706,15 @@ pub fn run() {
             translation_commands::export_translated_transcript,
             translation_commands::set_translation_languages,
             // == COMMANDS: translation models ==
+            #[cfg(feature = "local-ai")]
             translation_model_commands::list_opus_mt_models,
+            #[cfg(feature = "local-ai")]
             translation_model_commands::download_opus_mt_model,
+            #[cfg(feature = "local-ai")]
             translation_model_commands::cancel_opus_mt_download,
+            #[cfg(feature = "local-ai")]
             translation_model_commands::delete_opus_mt_model,
+            #[cfg(feature = "local-ai")]
             translation_model_commands::activate_opus_mt_model,
             // == COMMANDS: updater ==
             updater_commands::check_for_update,

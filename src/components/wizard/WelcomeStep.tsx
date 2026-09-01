@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { listAudioDevices } from "../../lib/ipc";
 import type { AudioDeviceList } from "../../lib/types";
+import { REMOTE_ONLY } from "../../lib/buildMode";
 import {
   Mic,
   Server,
+  Cloud,
   CheckCircle,
   XCircle,
   Loader2,
@@ -65,6 +67,12 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
       }
       if (cancelled) return;
       setResult({ ...detection });
+
+      if (REMOTE_ONLY) {
+        setPhase("complete");
+        onDetectionComplete(detection);
+        return;
+      }
 
       await sleep(300);
       if (cancelled) return;
@@ -176,7 +184,16 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
           found={phaseIndex > 1 && (inputCount > 0 || outputCount > 0)}
         />
 
-        {/* Ollama detection */}
+        {/* Local inference detection is skipped in the remote-only build. */}
+        {REMOTE_ONLY ? (
+          <DetectionRow
+            icon={<Cloud className="h-4 w-4" />}
+            label="Remote API mode"
+            status={phaseIndex < 2 ? "pending" : "done"}
+            detail={phaseIndex > 1 ? "Ready — configure cloud STT and LLM in the next steps" : undefined}
+            found={phaseIndex > 1}
+          />
+        ) : <>
         <DetectionRow
           icon={<Server className="h-4 w-4" />}
           label="Ollama (Local LLM)"
@@ -217,6 +234,7 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
           }
           found={phaseIndex > 3 && result.lmStudioRunning}
         />
+        </>}
       </div>
 
       {/* Summary */}
@@ -224,7 +242,11 @@ export function WelcomeStep({ onDetectionComplete }: WelcomeStepProps) {
         <div className="mt-8 w-full max-w-md animate-in fade-in slide-in-from-bottom-2 duration-300">
           <div className="rounded-xl border border-border/40 bg-secondary/20 px-5 py-4">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              {result.ollamaRunning || result.lmStudioRunning ? (
+              {REMOTE_ONLY ? (
+                <span className="text-info">
+                  This build sends AI requests to cloud APIs and does not use local inference models.
+                </span>
+              ) : result.ollamaRunning || result.lmStudioRunning ? (
                 <span className="text-success">
                   Local LLM detected! You can use AI features without an
                   internet connection.

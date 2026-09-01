@@ -1657,7 +1657,9 @@ async fn create_stt_provider_for_party(
             config.local_model_id.as_deref().unwrap_or("n/a")));
 
     match stt_type {
+        #[cfg(feature = "local-ai")]
         STTProviderType::WebSpeech => Ok(None), // Frontend handles this
+        #[cfg(feature = "local-ai")]
         STTProviderType::WhisperCpp => {
             let model_id = config.local_model_id.as_deref().unwrap_or("base");
             let model_result = get_local_model_path(state, "whisper_cpp", model_id)
@@ -1690,6 +1692,7 @@ async fn create_stt_provider_for_party(
                 }
             }
         }
+        #[cfg(feature = "local-ai")]
         STTProviderType::WindowsNative => {
             use crate::stt::windows_native::WindowsNativeSTT;
             let lang = get_stt_language(state);
@@ -1762,6 +1765,7 @@ async fn create_stt_provider_for_party(
             p.set_party(party_role);
             Ok(Some(Box::new(p)))
         }
+        #[cfg(feature = "local-ai")]
         STTProviderType::SherpaOnnx => {
             // Guard: ignore model_id from a different engine (e.g., parakeet model)
             let raw_model_id = config.local_model_id.as_deref();
@@ -1831,6 +1835,7 @@ async fn create_stt_provider_for_party(
                 }
             }
         }
+        #[cfg(feature = "local-ai")]
         STTProviderType::OrtStreaming => {
             let model_id = config.local_model_id.as_deref().unwrap_or("zipformer-en-20M");
             let model_result = get_local_model_path(state, "ort_streaming", model_id);
@@ -1853,6 +1858,7 @@ async fn create_stt_provider_for_party(
                 }
             }
         }
+        #[cfg(feature = "local-ai")]
         STTProviderType::ParakeetTdt => {
             // Guard: ignore model_id from a different engine (e.g., sense-voice-small from sherpa_onnx)
             let raw_model_id = config.local_model_id.as_deref();
@@ -1926,10 +1932,20 @@ async fn create_stt_provider_for_party(
                 }
             }
         }
+        #[cfg(not(feature = "local-ai"))]
+        STTProviderType::WebSpeech
+        | STTProviderType::WhisperCpp
+        | STTProviderType::WindowsNative
+        | STTProviderType::SherpaOnnx
+        | STTProviderType::OrtStreaming
+        | STTProviderType::ParakeetTdt => Err(
+            "Local and browser STT providers are disabled in the remote-only build; choose a cloud STT provider".to_string(),
+        ),
     }
 }
 
 /// Find the sherpa-onnx-offline.exe binary from the ModelManager's models directory.
+#[cfg(feature = "local-ai")]
 fn find_offline_binary_for_state(state: &AppState) -> Option<std::path::PathBuf> {
     let model_mgr = state.model_manager.as_ref()?;
     let mgr = model_mgr.lock().ok()?;
@@ -1937,6 +1953,7 @@ fn find_offline_binary_for_state(state: &AppState) -> Option<std::path::PathBuf>
 }
 
 /// Find any downloaded model for an engine (fallback when requested model isn't available).
+#[cfg(feature = "local-ai")]
 fn find_any_downloaded_model(
     state: &AppState,
     engine: &str,
@@ -1968,6 +1985,7 @@ fn find_any_downloaded_model(
 }
 
 /// Get the model path for a local STT engine from the ModelManager.
+#[cfg(feature = "local-ai")]
 fn get_local_model_path(
     state: &AppState,
     engine: &str,

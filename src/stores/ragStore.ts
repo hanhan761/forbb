@@ -19,6 +19,11 @@ import {
 } from "../lib/ipc";
 import { useConfigStore } from "./configStore";
 import { showToast } from "./toastStore";
+import { REMOTE_ONLY } from "../lib/buildMode";
+
+function normalizeRagConfig(config: RagConfig): RagConfig {
+  return REMOTE_ONLY ? { ...config, search_mode: "keyword" } : config;
+}
 
 interface IndexProgress {
   status: string;
@@ -101,7 +106,7 @@ export const useRagStore = create<RagState>((set) => ({
 
   loadRagConfig: async () => {
     try {
-      const config = await getRagConfig();
+      const config = normalizeRagConfig(await getRagConfig());
       // Sync enabled flag with persisted contextStrategy
       const strategy = useConfigStore.getState().contextStrategy;
       const shouldBeEnabled = strategy === "local_rag";
@@ -118,6 +123,7 @@ export const useRagStore = create<RagState>((set) => ({
 
   saveRagConfig: async (config: RagConfig) => {
     try {
+      config = normalizeRagConfig(config);
       set({ ragConfig: config, error: null });
       await updateRagConfig(config);
     } catch (e) {
@@ -128,6 +134,7 @@ export const useRagStore = create<RagState>((set) => ({
 
   saveRagConfigWithStaleCheck: async (config: RagConfig, prevConfig: RagConfig) => {
     try {
+      config = normalizeRagConfig(config);
       // Check if any index-affecting setting changed
       const affectsIndex = INDEX_AFFECTING_KEYS.some(
         (key) => config[key] !== prevConfig[key]
@@ -156,6 +163,13 @@ export const useRagStore = create<RagState>((set) => ({
   },
 
   checkOllamaStatus: async () => {
+    if (REMOTE_ONLY) {
+      set({
+        ollamaStatus: { connected: false, models: [] },
+        isCheckingConnection: false,
+      });
+      return;
+    }
     set({ isCheckingConnection: true });
     try {
       const status = await testOllamaEmbeddingConnection();
@@ -211,6 +225,10 @@ export const useRagStore = create<RagState>((set) => ({
   },
 
   pullModel: async (model: string) => {
+    if (REMOTE_ONLY) {
+      showToast("Ollama embedding downloads are disabled in the remote-only build", "info");
+      return;
+    }
     try {
       set({ isPullingModel: true, error: null });
       showToast(`Pulling model "${model}"...`, "info");

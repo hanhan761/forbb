@@ -13,6 +13,7 @@ import {
   hasApiKey,
 } from "../lib/ipc";
 import type { TranslationProviderType, TranslationLanguage, TranslationConnectionStatus } from "../lib/types";
+import { REMOTE_ONLY } from "../lib/buildMode";
 import {
   Globe,
   Cloud,
@@ -99,7 +100,10 @@ const CLOUD_PROVIDERS: ProviderOption[] = [
   },
 ];
 
-const ALL_PROVIDERS: ProviderOption[] = [...LOCAL_PROVIDERS, ...CLOUD_PROVIDERS];
+const VISIBLE_LOCAL_PROVIDERS: ProviderOption[] = REMOTE_ONLY
+  ? LOCAL_PROVIDERS.filter((provider) => provider.value === "llm")
+  : LOCAL_PROVIDERS;
+const ALL_PROVIDERS: ProviderOption[] = [...VISIBLE_LOCAL_PROVIDERS, ...CLOUD_PROVIDERS];
 
 // ── Languages (comprehensive default list) ──
 
@@ -221,7 +225,7 @@ export function TranslationSettings() {
   // Sync selectedProvider grid when the active provider loads from storage
   // (loadConfig runs async after mount, so useState initial value may be stale)
   useEffect(() => {
-    setSelectedProvider(provider);
+    setSelectedProvider(REMOTE_ONLY && provider === "opus-mt" ? "llm" : provider);
   }, [provider]);
 
   const currentProviderOption = ALL_PROVIDERS.find((p) => p.value === selectedProvider);
@@ -230,6 +234,7 @@ export function TranslationSettings() {
   // Refreshes when the active provider changes (e.g., after activating a new model)
 
   const refreshOpusMtModels = useCallback((fresh?: OpusMtModelStatus[]) => {
+    if (REMOTE_ONLY) return;
     const apply = (models: OpusMtModelStatus[]) => {
       setOpusMtModels(models);
       // When OPUS-MT is active, sync targetLang to the active model's target
@@ -508,6 +513,11 @@ export function TranslationSettings() {
 
   return (
     <div className="space-y-5">
+      {REMOTE_ONLY && (
+        <div className="rounded-xl border border-info/20 bg-info/5 px-4 py-3 text-xs text-info">
+          Remote-only build: translation uses Microsoft, Google, DeepL, or your configured remote LLM. Offline OPUS-MT models are not bundled or downloaded.
+        </div>
+      )}
       {/* ── Active Provider Banner (full-width above grid) ── */}
       <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-5 py-3.5">
         <Globe className="h-4 w-4 text-primary shrink-0" />
@@ -541,13 +551,13 @@ export function TranslationSettings() {
                 <div className="flex h-5 w-5 items-center justify-center rounded bg-success/10">
                   <Server className="h-3 w-3 text-success" />
                 </div>
-                <span className="text-xs font-semibold text-foreground">Local & Offline</span>
+                <span className="text-xs font-semibold text-foreground">{REMOTE_ONLY ? "Remote LLM" : "Local & Offline"}</span>
                 <span className="ml-auto text-meta text-muted-foreground/60 font-medium uppercase tracking-wider">
-                  Free · No API Key · Private
+                  {REMOTE_ONLY ? "Uses the active remote LLM" : "Free · No API Key · Private"}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {LOCAL_PROVIDERS.map((p) => (
+                {VISIBLE_LOCAL_PROVIDERS.map((p) => (
                   <ProviderCard
                     key={p.value}
                     provider={p}
@@ -744,7 +754,7 @@ export function TranslationSettings() {
           )}
 
           {/* ── OPUS-MT Model Manager ── */}
-          {isOpusMt && <OpusMtModelManager onModelsChanged={refreshOpusMtModels} />}
+          {!REMOTE_ONLY && isOpusMt && <OpusMtModelManager onModelsChanged={refreshOpusMtModels} />}
 
           {/* ── LLM local provider — Test Connection ── */}
           {isLlm && (

@@ -13,8 +13,10 @@ use crate::llm::openrouter_models::OpenRouterModelCache;
 use crate::llm::LLMRouter;
 use crate::rag::RagManager;
 use crate::translation::TranslationRouter;
+#[cfg(feature = "local-ai")]
 use crate::translation::opus_mt_manager::OpusMtManager;
 use crate::stt::groq_whisper::GroqConfig;
+#[cfg(feature = "local-ai")]
 use crate::stt::local_engines::ModelManager;
 use crate::stt::provider::DualPassConfig;
 use crate::stt::STTRouter;
@@ -71,9 +73,11 @@ pub struct AppState {
     pub intelligence: Option<Arc<Mutex<IntelligenceEngine>>>,
     pub context: Option<Arc<Mutex<ContextManager>>>,
     pub credentials: Option<Arc<Mutex<CredentialManager>>>,
+    #[cfg(feature = "local-ai")]
     pub model_manager: Option<Arc<Mutex<ModelManager>>>,
     pub rag: Option<Arc<Mutex<RagManager>>>,
     pub translation: Option<Arc<Mutex<TranslationRouter>>>,
+    #[cfg(feature = "local-ai")]
     pub opus_mt_manager: Option<Arc<Mutex<OpusMtManager>>>,
     pub whisper_config: Arc<RwLock<DualPassConfig>>,
     /// Shared Groq Whisper config — read by running providers on each API call,
@@ -129,9 +133,11 @@ impl AppState {
             intelligence: None,
             context: None,
             credentials: None,
+            #[cfg(feature = "local-ai")]
             model_manager: None,
             rag: None,
             translation: None,
+            #[cfg(feature = "local-ai")]
             opus_mt_manager: None,
             whisper_config: Arc::new(RwLock::new(DualPassConfig::default())),
             shared_groq_config: Arc::new(RwLock::new(GroqConfig::default())),

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:remote": "node scripts/build-remote.js",
     "preview": "vite preview",
     "tauri": "tauri",
     "release": "node scripts/release.js",

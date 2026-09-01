@@ -15,6 +15,7 @@ import { useSpeakerStore } from "../stores/speakerStore";
 import { useAudioLevel } from "../hooks/useAudioLevel";
 import { hasApiKey, listLocalSTTEngines, setLLMProvider, setActiveModel, getApiKey } from "../lib/ipc";
 import type { STTProviderType, LLMProviderType, LocalSTTEngineInfo } from "../lib/types";
+import { DEFAULT_REMOTE_STT_PROVIDER, REMOTE_ONLY } from "../lib/buildMode";
 import { showToast } from "../stores/toastStore";
 
 // ── Human-friendly provider labels ──
@@ -92,7 +93,7 @@ const LLM_PROVIDER_OPTIONS: {
   { value: "ollama", label: "Ollama", IconComponent: Monitor, requiresKey: false, isLocal: true },
   { value: "lm_studio", label: "LM Studio", IconComponent: Monitor, requiresKey: false, isLocal: true },
   { value: "openai", label: "OpenAI", IconComponent: Cloud, requiresKey: true, isLocal: false },
-  { value: "qwen", label: "Qwen", IconComponent: Sparkles, requiresKey: false, isLocal: false },
+  { value: "qwen", label: "Qwen", IconComponent: Sparkles, requiresKey: REMOTE_ONLY, isLocal: false },
   { value: "anthropic", label: "Anthropic", IconComponent: Cloud, requiresKey: true, isLocal: false },
   { value: "groq", label: "Groq", IconComponent: Zap, requiresKey: true, isLocal: false },
   { value: "gemini", label: "Gemini", IconComponent: Cloud, requiresKey: true, isLocal: false },
@@ -180,7 +181,7 @@ export function ServiceStatusBar({ compact = false }: { compact?: boolean }) {
     parakeet_tdt: "parakeet-tdt-0.6b-v3-int8",
   };
 
-  const youSttProvider = meetingAudioConfig?.you.stt_provider ?? "web_speech";
+  const youSttProvider = meetingAudioConfig?.you.stt_provider ?? (REMOTE_ONLY ? DEFAULT_REMOTE_STT_PROVIDER : "web_speech");
   const youLocalModel = meetingAudioConfig?.you.local_model_id
     || activeModelPerEngine[youSttProvider]
     || DEFAULT_MODEL_PER_ENGINE[youSttProvider]
@@ -207,6 +208,8 @@ export function ServiceStatusBar({ compact = false }: { compact?: boolean }) {
         ?? DEFAULT_MODEL_PER_ENGINE[provider]
         ?? useConfigStore.getState().activeWhisperModel;
       if (engineModel) updates.local_model_id = engineModel;
+    } else {
+      updates.local_model_id = undefined;
     }
     setMeetingAudioConfig({
       ...meetingAudioConfig,
@@ -657,13 +660,11 @@ function STTPickerDropdown({
     (async () => {
       try {
         const cloudProviders = ["deepgram", "whisper_api", "azure_speech", "groq_whisper"];
-        const [engines, ...keyResults] = await Promise.all([
-          listLocalSTTEngines(),
-          ...cloudProviders.map(async (p) => {
-            try { return { p, ok: await hasApiKey(p) }; }
-            catch { return { p, ok: false }; }
-          }),
-        ]);
+        const engines = REMOTE_ONLY ? [] : await listLocalSTTEngines();
+        const keyResults = await Promise.all(cloudProviders.map(async (p) => {
+          try { return { p, ok: await hasApiKey(p) }; }
+          catch { return { p, ok: false }; }
+        }));
         if (cancelled) return;
         setLocalEngines(engines);
         const status: Record<string, boolean> = {};
@@ -707,6 +708,7 @@ function STTPickerDropdown({
   }
 
   function isAvailable(opt: (typeof STT_PROVIDER_OPTIONS)[0]): boolean {
+    if (REMOTE_ONLY && !opt.isCloud) return false;
     if (opt.inputOnly && !isInput) return false;
     if (opt.requiresDownload) return isLocalEngineReady(opt.requiresDownload);
     // Assume available if key status hasn't loaded yet — prevents false fallbacks
@@ -940,7 +942,11 @@ function LLMPickerDropdown({
   const verifiedProviders = useConfigStore((s) => s.verifiedCloudProviders);
 
   // Internal state: pending provider (may differ from active while browsing)
-  const [pendingProvider, setPendingProvider] = useState(currentProvider);
+  const [pendingProvider, setPendingProvider] = useState(
+    REMOTE_ONLY && ["codex", "ollama", "lm_studio"].includes(currentProvider)
+      ? "qwen"
+      : currentProvider
+  );
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
 
@@ -989,12 +995,13 @@ function LLMPickerDropdown({
 
   // Only show verified/ready providers
   const available = LLM_PROVIDER_OPTIONS.filter((o) => {
+    if (REMOTE_ONLY && o.isLocal) return false;
     if (o.value === "custom") return false;
     if (o.requiresKey) return verifiedProviders.includes(o.value);
     return verifiedProviders.includes(o.value); // Local also needs verification
   });
   // Fallback: always include the current active provider
-  if (!available.some((o) => o.value === currentProvider)) {
+  if (!available.some((o) => o.value === currentProvider) && !REMOTE_ONLY) {
     const opt = LLM_PROVIDER_OPTIONS.find((o) => o.value === currentProvider);
     if (opt) available.unshift(opt);
   }

@@ -13,6 +13,7 @@ import {
 } from "../lib/ipc";
 import { storeApiKey, getApiKey, hasApiKey } from "../lib/ipc";
 import type { STTProviderType, LocalSTTEngineInfo, DeepgramConfig, GroqConfig } from "../lib/types";
+import { REMOTE_ONLY } from "../lib/buildMode";
 import {
   CheckCircle,
   XCircle,
@@ -312,6 +313,7 @@ export function STTSettings() {
   // ── Load readiness state ──
 
   const loadLocalEngines = useCallback(async () => {
+    if (REMOTE_ONLY) return;
     try {
       const data = await listLocalSTTEngines();
       setLocalEngines(data);
@@ -319,11 +321,13 @@ export function STTSettings() {
   }, []);
 
   useEffect(() => {
+    if (REMOTE_ONLY) return;
     loadLocalEngines();
   }, [loadLocalEngines]);
 
   // Refresh engine readiness whenever any model download completes
   useEffect(() => {
+    if (REMOTE_ONLY) return;
     let unlisten: (() => void) | null = null;
     listen<{ status: string }>("model_download_progress", (event) => {
       if (event.payload.status === "complete") {
@@ -539,15 +543,20 @@ export function STTSettings() {
   const showModelPanel = !!currentProviderOption?.requiresModels;
   const modelEngineId = currentProviderOption?.requiresModels;
 
-  const localProviders = PROVIDER_OPTIONS.filter((p) => p.isLocal);
+  const localProviders = REMOTE_ONLY ? [] : PROVIDER_OPTIONS.filter((p) => p.isLocal);
   const cloudProviders = PROVIDER_OPTIONS.filter((p) => !p.isLocal);
 
   return (
     <div className="space-y-6">
+      {REMOTE_ONLY && (
+        <div className="rounded-xl border border-info/20 bg-info/5 px-4 py-3 text-xs text-info">
+          Remote-only build: audio is sent to the selected cloud STT provider. No local speech model is bundled or downloaded.
+        </div>
+      )}
       {/* Provider Selection — grouped: Local then Cloud */}
       <div className="rounded-xl border border-border/30 bg-card/50 overflow-hidden">
         {/* Local Providers */}
-        <div className="px-5 pt-4 pb-3 border-b border-border/20 bg-muted/10">
+        {localProviders.length > 0 && <div className="px-5 pt-4 pb-3 border-b border-border/20 bg-muted/10">
           <div className="flex items-center gap-2 mb-3">
             <div className="flex h-5 w-5 items-center justify-center rounded bg-success/10">
               <HardDrive className="h-3 w-3 text-success" />
@@ -567,7 +576,7 @@ export function STTSettings() {
               />
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Cloud Providers */}
         <div className="px-5 pt-4 pb-4">
@@ -594,7 +603,7 @@ export function STTSettings() {
       </div>
 
       {/* Inline Model Panel — shown when the selected provider needs models */}
-      {showModelPanel && modelEngineId && (
+      {!REMOTE_ONLY && showModelPanel && modelEngineId && (
         <div className="rounded-xl border border-border/30 bg-card/50 p-5">
           <h3 className="mb-1 text-sm font-semibold text-primary/80 flex items-center gap-1.5">
             <HardDrive className="h-4 w-4" />

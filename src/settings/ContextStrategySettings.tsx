@@ -3,6 +3,7 @@ import { useConfigStore } from "../stores/configStore";
 import { useRagStore } from "../stores/ragStore";
 import { useRagEvents } from "../hooks/useRagEvents";
 import type { ContextStrategy, RagConfig } from "../lib/types";
+import { REMOTE_ONLY } from "../lib/buildMode";
 import {
   createGeminiContextCache,
   deleteGeminiContextCache,
@@ -125,6 +126,10 @@ const PRESET_KEYS: (keyof RagConfig)[] = [
   "search_mode", "top_k", "chunk_size", "chunk_overlap",
   "embedding_model", "semantic_weight", "batch_size", "similarity_threshold",
 ];
+
+const VISIBLE_PRESETS = REMOTE_ONLY
+  ? PRESETS.filter((preset) => preset.id === "fastest")
+  : PRESETS;
 
 function getActivePresetId(config: RagConfig): string | null {
   for (const p of PRESETS) {
@@ -395,21 +400,30 @@ export function ContextStrategySettings() {
   // Keyword search is fully local and does not need Ollama. Only probe the
   // embedding service when the user selects a semantic-capable mode.
   useEffect(() => {
-    if (localConfig.search_mode !== "keyword") {
+    if (!REMOTE_ONLY && localConfig.search_mode !== "keyword") {
       checkOllamaStatus();
     }
   }, [localConfig.search_mode, checkOllamaStatus]);
 
   useEffect(() => {
     if (ragConfig) {
-      setLocalConfig({ ...ragConfig, include_transcript: false });
+      setLocalConfig({
+        ...ragConfig,
+        search_mode: REMOTE_ONLY ? "keyword" : ragConfig.search_mode,
+        include_transcript: false,
+      });
     }
   }, [ragConfig]);
 
   const handleStrategyChange = (strategy: ContextStrategy) => {
     setContextStrategy(strategy);
     const enabled = strategy === "local_rag";
-    const updated = { ...localConfig, enabled, include_transcript: false };
+    const updated = {
+      ...localConfig,
+      enabled,
+      search_mode: REMOTE_ONLY ? "keyword" : localConfig.search_mode,
+      include_transcript: false,
+    };
     setLocalConfig(updated);
     saveRagConfig(updated);
   };
@@ -435,6 +449,8 @@ export function ContextStrategySettings() {
 
   const handleSelectChange = useCallback(
     <K extends keyof RagConfig>(key: K, value: RagConfig[K]) => {
+      if (REMOTE_ONLY && key === "embedding_model") return;
+      if (REMOTE_ONLY && key === "search_mode") value = "keyword" as RagConfig[K];
       const extraFields: Partial<RagConfig> = {};
       if (key === "embedding_model") {
         const dims = MODEL_DIMS[value as string] ?? 768;
@@ -456,6 +472,7 @@ export function ContextStrategySettings() {
       const updated: RagConfig = {
         ...localConfig,
         ...preset.config,
+        ...(REMOTE_ONLY && { search_mode: "keyword" }),
         include_transcript: false,
         embedding_dimensions: MODEL_DIMS[preset.config.embedding_model] ?? 768,
       };
@@ -525,10 +542,12 @@ export function ContextStrategySettings() {
         >
           <div className="flex items-center gap-2">
             <Database className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">Local RAG</span>
+            <span className="text-sm font-medium text-foreground">{REMOTE_ONLY ? "Keyword RAG" : "Local RAG"}</span>
           </div>
           <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-            Embed documents locally via Ollama, hybrid semantic+keyword search
+            {REMOTE_ONLY
+              ? "Index documents locally with SQLite keyword search; send selected context to the remote LLM"
+              : "Embed documents locally via Ollama, hybrid semantic+keyword search"}
           </p>
         </button>
 
@@ -561,7 +580,7 @@ export function ContextStrategySettings() {
               </p>
             </div>
             <div className="grid grid-cols-5 gap-2">
-              {PRESETS.map((preset) => {
+              {VISIBLE_PRESETS.map((preset) => {
                 const isActive = activePresetId === preset.id;
                 return (
                   <button
@@ -587,8 +606,9 @@ export function ContextStrategySettings() {
               })}
             </div>
             <p className="mt-2.5 text-meta text-muted-foreground/70 leading-relaxed">
-              Latency = query embedding + chunk search. Fastest uses keyword-only (no embedding).
-              Accurate presets produce smaller chunks and retrieve more — requires index rebuild.
+              {REMOTE_ONLY
+                ? "Remote-only mode uses SQLite FTS5 keyword search and never starts or downloads Ollama."
+                : "Latency = query embedding + chunk search. Fastest uses keyword-only (no embedding). Accurate presets produce smaller chunks and retrieve more — requires index rebuild."}
             </p>
           </div>
 
@@ -646,6 +666,7 @@ export function ContextStrategySettings() {
                 </div>
               )}
 
+              {!REMOTE_ONLY && <>
               {/* Embedding model */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -713,6 +734,7 @@ export function ContextStrategySettings() {
                   )}
                 </div>
               )}
+              </>}
             </div>
           </div>
 
@@ -753,8 +775,10 @@ export function ContextStrategySettings() {
                   onChange={(e) => handleSelectChange("search_mode", e.target.value)}
                   className="w-full rounded-lg border border-border/50 bg-background px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
                 >
-                  <option value="hybrid">Hybrid (recommended)</option>
-                  <option value="semantic">Semantic Only</option>
+                  {!REMOTE_ONLY && <>
+                    <option value="hybrid">Hybrid (recommended)</option>
+                    <option value="semantic">Semantic Only</option>
+                  </>}
                   <option value="keyword">Keyword Only (fastest)</option>
                 </select>
               </div>

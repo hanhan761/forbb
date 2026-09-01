@@ -5,9 +5,11 @@ import {
   setLLMProvider,
   setActiveModel,
   storeApiKey,
+  getApiKey,
   testLLMConnection,
 } from "../../lib/ipc";
 import type { LLMProviderType, ModelInfo } from "../../lib/types";
+import { REMOTE_ONLY } from "../../lib/buildMode";
 import {
   Server,
   Cloud,
@@ -44,10 +46,10 @@ const CLOUD_PROVIDERS: ProviderCard[] = [
   {
     type: "qwen",
     label: "Qwen (DashScope)",
-    description: "Uses the workspace API from .env",
+    description: REMOTE_ONLY ? "DashScope cloud API" : "Uses the workspace API from .env",
     icon: <Sparkles className="h-5 w-5" />,
     recommended: true,
-    requiresKey: false,
+    requiresKey: REMOTE_ONLY,
   },
   {
     type: "anthropic",
@@ -84,7 +86,7 @@ export function LLMSetupStep({
   const setConfigProvider = useConfigStore((s) => s.setLLMProvider);
   const setConfigModel = useConfigStore((s) => s.setLLMModel);
 
-  const hasLocalLLM = ollamaRunning || lmStudioRunning;
+  const hasLocalLLM = !REMOTE_ONLY && (ollamaRunning || lmStudioRunning);
 
   const [selectedProvider, setSelectedProvider] = useState<LLMProviderType>(
     "qwen"
@@ -111,11 +113,21 @@ export function LLMSetupStep({
     } else if (selectedProvider === "lm_studio" && lmStudioRunning) {
       handleLoadModels();
     }
-  }, [selectedProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedProvider, apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const requiresApiKey = ["openai", "anthropic", "groq", "gemini", "openrouter"].includes(
+  const requiresApiKey = ["openai", "qwen", "anthropic", "groq", "gemini", "openrouter"].includes(
     selectedProvider
   );
+
+  useEffect(() => {
+    if (!requiresApiKey) {
+      setApiKeyValue("");
+      return;
+    }
+    getApiKey(selectedProvider)
+      .then((key) => setApiKeyValue(key || ""))
+      .catch(() => setApiKeyValue(""));
+  }, [selectedProvider, requiresApiKey]);
 
   const buildProviderConfig = useCallback(() => {
     const config: Record<string, unknown> = {
@@ -224,8 +236,14 @@ export function LLMSetupStep({
       </div>
 
       <div className="w-full max-w-lg space-y-6">
+        {REMOTE_ONLY && (
+          <div className="rounded-xl border border-info/20 bg-info/5 px-5 py-4 text-xs text-info">
+            Remote-only build: local LLMs are excluded. Configure a cloud API key below.
+          </div>
+        )}
+
         {/* Local LLM Detection Banner */}
-        {hasLocalLLM && (
+        {!REMOTE_ONLY && hasLocalLLM && (
           <div className="rounded-xl border border-success/20 bg-success/5 px-5 py-4">
             <div className="flex items-center gap-2">
               <Server className="h-4 w-4 text-success" />
@@ -244,7 +262,7 @@ export function LLMSetupStep({
         )}
 
         {/* Local Provider Cards */}
-        <div className="space-y-2">
+        {!REMOTE_ONLY && <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Local Providers
             </p>
@@ -277,7 +295,7 @@ export function LLMSetupStep({
                 />
               )}
             </div>
-          </div>
+          </div>}
 
         {/* Cloud Provider Cards */}
         <div className="space-y-2">
@@ -311,7 +329,7 @@ export function LLMSetupStep({
                 value={apiKey}
                 onChange={(e) => setApiKeyValue(e.target.value)}
                 onBlur={handleSaveApiKey}
-                placeholder={`Enter your ${selectedProvider === "anthropic" ? "Anthropic" : selectedProvider === "openai" ? "OpenAI" : "Groq"} API key`}
+                placeholder={`Enter your ${selectedProvider === "qwen" ? "Qwen/DashScope" : selectedProvider === "anthropic" ? "Anthropic" : selectedProvider === "openai" ? "OpenAI" : "Groq"} API key`}
                 aria-label="API key"
                 className="w-full rounded-xl border border-border/40 bg-background px-4 py-3 pr-11 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
               />
@@ -408,7 +426,9 @@ export function LLMSetupStep({
             {selectedProvider === "codex"
               ? "Codex uses your local CLI login through a hidden stdio app-server. NexQ does not control the meeting window or enter text into it."
               : selectedProvider === "qwen"
-                ? "Qwen is loaded from the project .env. Test the connection, then choose qwen-plus for the first run."
+                ? REMOTE_ONLY
+                  ? "Enter your DashScope API key, test the connection, then choose qwen-plus."
+                  : "Qwen is loaded from the project .env. Test the connection, then choose qwen-plus for the first run."
               : hasLocalLLM
                 ? "For privacy and speed, we recommend using Ollama with llama3.2. Your conversations never leave your machine."
               : "For the best experience, we recommend Anthropic Claude. For local privacy, install Ollama and run it before starting NexQ."}

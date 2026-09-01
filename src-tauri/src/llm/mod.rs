@@ -1,8 +1,10 @@
 pub mod anthropic;
+#[cfg(feature = "local-ai")]
 pub mod codex;
 pub mod custom;
 pub mod gemini;
 pub mod gemini_cache;
+#[cfg(feature = "local-ai")]
 pub mod ollama;
 pub mod openai_compat;
 pub mod openrouter_models;
@@ -153,14 +155,35 @@ impl LLMRouter {
         let provider_type = ProviderType::from_str(&config.provider_type)?;
 
         let provider: Box<dyn LLMProvider> = match &provider_type {
+            #[cfg(feature = "local-ai")]
             ProviderType::Codex => Box::new(codex::CodexClient::new()),
+            #[cfg(not(feature = "local-ai"))]
+            ProviderType::Codex => {
+                return Err(LLMError::NotConfigured(
+                    "Codex is disabled in the remote-only build".to_string(),
+                ));
+            }
+            #[cfg(feature = "local-ai")]
             ProviderType::Ollama => {
                 Box::new(ollama::OllamaClient::new(config.base_url.as_deref()))
             }
+            #[cfg(not(feature = "local-ai"))]
+            ProviderType::Ollama => {
+                return Err(LLMError::NotConfigured(
+                    "Ollama is disabled in the remote-only build".to_string(),
+                ));
+            }
+            #[cfg(feature = "local-ai")]
             ProviderType::LmStudio => {
                 Box::new(openai_compat::create_lm_studio_client(
                     config.base_url.as_deref(),
                 ))
+            }
+            #[cfg(not(feature = "local-ai"))]
+            ProviderType::LmStudio => {
+                return Err(LLMError::NotConfigured(
+                    "LM Studio is disabled in the remote-only build".to_string(),
+                ));
             }
             ProviderType::Openai => {
                 let api_key = config.api_key.as_deref().ok_or_else(|| {
@@ -284,10 +307,8 @@ impl LLMRouter {
 
     /// Get information about all available providers.
     pub fn get_all_providers() -> Vec<ProviderInfo> {
-        let all_types = [
-            ProviderType::Codex,
-            ProviderType::Ollama,
-            ProviderType::LmStudio,
+        #[cfg_attr(not(feature = "local-ai"), allow(unused_mut))]
+        let mut all_types = vec![
             ProviderType::Openai,
             ProviderType::Qwen,
             ProviderType::Anthropic,
@@ -296,6 +317,14 @@ impl LLMRouter {
             ProviderType::Openrouter,
             ProviderType::Custom,
         ];
+
+        #[cfg(feature = "local-ai")]
+        {
+            all_types.splice(
+                0..0,
+                [ProviderType::Codex, ProviderType::Ollama, ProviderType::LmStudio],
+            );
+        }
 
         all_types
             .iter()

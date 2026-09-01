@@ -5,6 +5,7 @@ pub mod gemini_cache_commands;
 pub mod intelligence_commands;
 pub mod llm_commands;
 pub mod meeting_commands;
+#[cfg(feature = "local-ai")]
 pub mod model_commands;
 pub mod prepare_commands;
 pub mod settings_commands;
@@ -13,6 +14,7 @@ pub mod stt_commands;
 pub mod rag_commands;
 pub mod recording_commands;
 pub mod translation_commands;
+#[cfg(feature = "local-ai")]
 pub mod translation_model_commands;
 pub mod tray_commands;
 pub mod updater_commands;
