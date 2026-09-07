@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "remote-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Remote-only release tag, for example remote-v2.20.10"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,8 +17,17 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate release tag
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^remote-v\d+\.\d+\.\d+$') {
+            throw "RELEASE_TAG must match remote-v<major>.<minor>.<patch>"
+          }
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -35,14 +50,15 @@ jobs:
         uses: tauri-apps/tauri-action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VITE_NEXQ_REMOTE_ONLY: "true"
         with:
-          args: --features remote-only -- --no-default-features
-          tagName: ${{ github.ref_name }}
-          releaseName: "NexQ Remote-only ${{ github.ref_name }}"
-          releaseBody: "Remote-only build: cloud STT/translation/LLM, local audio capture and SQLite history."
+          tauriScript: npm run tauri
+          # Direct installation does not require updater signing. Keep this
+          # release usable even when repository signing secrets are absent.
+          args: --no-sign --features remote-only -- --no-default-features
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: "NexQ Remote-only ${{ env.RELEASE_TAG }}"
+          releaseBody: "Remote-only build: cloud STT/translation/LLM, local audio capture and SQLite history. Download the x64-setup.exe installer."
           releaseDraft: false
           prerelease: true
-          includeUpdaterJson: true
+          includeUpdaterJson: false

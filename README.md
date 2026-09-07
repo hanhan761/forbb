@@ -108,7 +108,9 @@ through NexQ's credential manager and are not hard-coded into the app.
 
 Remote-only installers are published by the
 [remote release workflow](.github/workflows/release-remote.yml) for tags matching
-`remote-v*`. A release must be published before end users can download the installer.
+`remote-v*`. To publish one, push a tag such as `remote-v2.20.10`, or run the
+workflow manually from GitHub Actions and provide the tag as an input. A release
+must be published before end users can download the installer.
 
 ## Gemini Context Cache
 
