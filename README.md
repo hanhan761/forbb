@@ -63,6 +63,8 @@
 The pure API version is the prebuilt **Remote-only** installer. It does not require
 Node.js, Rust, the Tauri CLI, or local AI model downloads.
 
+**Current direct download:** [NexQ_2.20.10_x64-setup.exe](https://github.com/hanhan761/forbb/releases/download/remote-v2.20.10/NexQ_2.20.10_x64-setup.exe)
+
 1. Open the [Releases](https://github.com/hanhan761/forbb/releases) page.
 2. Open the latest release whose name starts with **NexQ Remote-only**.
 3. Download the `x64-setup.exe` asset and run it. The installer uses the current-user
