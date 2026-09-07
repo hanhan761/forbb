@@ -7,11 +7,11 @@
 
 <p align="center">
 
-[![Release](https://img.shields.io/github/v/release/VahidAlizadeh/NexQ?style=flat-square&color=blue)](https://github.com/VahidAlizadeh/NexQ/releases/latest)
+[![Release](https://img.shields.io/github/v/release/hanhan761/forbb?style=flat-square&color=blue)](https://github.com/hanhan761/forbb/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/VahidAlizadeh/NexQ/release.yml?style=flat-square&label=build)](https://github.com/VahidAlizadeh/NexQ/actions/workflows/release.yml)
-[![Downloads](https://img.shields.io/github/downloads/VahidAlizadeh/NexQ/total?style=flat-square&color=orange)](https://github.com/VahidAlizadeh/NexQ/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?style=flat-square&logo=windows)](https://github.com/VahidAlizadeh/NexQ/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/hanhan761/forbb/release.yml?style=flat-square&label=build)](https://github.com/hanhan761/forbb/actions/workflows/release.yml)
+[![Downloads](https://img.shields.io/github/downloads/hanhan761/forbb/total?style=flat-square&color=orange)](https://github.com/hanhan761/forbb/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?style=flat-square&logo=windows)](https://github.com/hanhan761/forbb/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?style=flat-square&logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
 [![Rust](https://img.shields.io/badge/Rust-stable-DEA584?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
@@ -56,18 +56,33 @@
 - **Audio recording & playback** — record meetings as WAV, replay with synced transcript
 - **Meeting scenarios** — pre-configured templates for interviews, lectures, and team meetings
 
-## Quick Start
+## Installation
 
-1. **Download** the [latest release](https://github.com/VahidAlizadeh/NexQ/releases/latest)
-2. **Configure** your STT and LLM providers. If the local Codex CLI is installed and authenticated, NexQ can use its `codex app-server` session without another API key.
-3. **Prepare interview** to verify the selected microphone, system output, STT, translation, knowledge base, and answer model.
-4. **Start** a meeting — NexQ reads selected local audio and shows assistance in its overlay; it does not control, speak into, or type into the meeting app.
+### Windows users: install the pure API version
+
+The pure API version is the prebuilt **Remote-only** installer. It does not require
+Node.js, Rust, the Tauri CLI, or local AI model downloads.
+
+1. Open the [Releases](https://github.com/hanhan761/forbb/releases) page.
+2. Open the latest release whose name starts with **NexQ Remote-only**.
+3. Download the `x64-setup.exe` asset and run it. The installer uses the current-user
+   install mode and does not require administrator privileges.
+4. In NexQ Settings, configure the cloud STT, translation, and LLM API keys.
+
+This version keeps audio capture, meeting history, recording, and the UI on the
+device. Speech recognition, translation, and LLM requests use the configured cloud
+APIs. It does not include local Whisper, Ollama embeddings, or other local AI
+engines; document search uses local SQLite keyword search.
+
+> End users should download the installer above. Do not run `npm install` or
+> `npx tauri build` unless you are building the application from source.
+
+After installation, continue with the [Getting Started Guide](docs/user-guide/getting-started.md)
+or browse the [full user guides](docs/user-guide/).
 
 For live interviews, follow the meeting platform, school, and local consent rules for recording and AI assistance.
 
-[Getting Started Guide](docs/user-guide/getting-started.md) | [All User Guides](docs/user-guide/)
-
-## Remote-only build
+### Developer build: Remote-only from source
 
 NexQ also provides a smaller remote-only desktop build for machines that should not
 download or run local AI models. It keeps microphone/system-audio capture, the local
@@ -75,16 +90,25 @@ SQLite meeting history, recording, and the UI on the device, while sending speec
 recognition, translation, and LLM requests to the configured cloud APIs. Document RAG
 uses local SQLite keyword search; Ollama embeddings are not included or started.
 
+This path compiles the Tauri/Rust application and is intended for maintainers and
+developers, not end users.
+
 Build it from source with:
 
 ```bash
-npm install
+npm ci
 npm run build:remote
 ```
 
-The original all-in-one build remains available with `npx tauri build`. The remote-only
-build requires API keys for the selected STT, translation, and LLM providers; those keys
-are stored through NexQ's credential manager and are not hard-coded into the app.
+The `build:remote` command disables Cargo's default `local-ai` feature. Do not replace
+it with `npx tauri build`, or omit `--no-default-features` from the remote build, because
+that will compile the slower all-in-one local AI version. The remote-only build requires
+API keys for the selected STT, translation, and LLM providers; those keys are stored
+through NexQ's credential manager and are not hard-coded into the app.
+
+Remote-only installers are published by the
+[remote release workflow](.github/workflows/release-remote.yml) for tags matching
+`remote-v*`. A release must be published before end users can download the installer.
 
 ## Gemini Context Cache
 
@@ -154,8 +178,8 @@ Cache expires after your chosen TTL (30 min – 24 hours). Delete it early from 
 
 ```bash
 # Clone the repository
-git clone https://github.com/VahidAlizadeh/NexQ.git
-cd NexQ
+git clone https://github.com/hanhan761/forbb.git
+cd forbb
 
 # Install frontend dependencies
 npm install
