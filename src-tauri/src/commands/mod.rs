@@ -17,4 +17,3 @@ pub mod translation_commands;
 #[cfg(feature = "local-ai")]
 pub mod translation_model_commands;
 pub mod tray_commands;
-pub mod updater_commands;

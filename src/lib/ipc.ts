@@ -30,7 +30,6 @@ import type {
   TranslationConnectionStatus,
   OpusMtModelStatus,
   TrayState,
-  UpdateInfo,
   QueryRoute,
   PrepareCheck,
   AnswerLength,
@@ -794,18 +793,4 @@ export async function getGeminiCacheStatus(): Promise<GeminiCacheInfo | null> {
   const result = await invoke<string | null>("get_gemini_cache_status");
   if (!result) return null;
   return JSON.parse(result);
-}
-
-// == IPC: Updater ==
-
-export async function checkForUpdate(): Promise<UpdateInfo | null> {
-  return invoke<UpdateInfo | null>("check_for_update");
-}
-
-export async function downloadAndInstallUpdate(): Promise<void> {
-  return invoke("download_and_install_update");
-}
-
-export async function restartForUpdate(): Promise<void> {
-  return invoke("restart_for_update");
 }

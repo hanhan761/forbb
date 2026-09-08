@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "productName": "NexQ",
-  "version": "2.20.11",
+  "version": "2.20.12",
   "identifier": "com.nexq.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -55,7 +55,6 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -76,14 +75,6 @@
         "sidebarImage": "nsis-sidebar.bmp",
         "installerHooks": "./nsis-hooks.nsh"
       }
-    }
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMzM0VGQzk0QTQwN0UyOUEKUldTYTRnZWtsUHcrTXcxenlTdlRkZGVtWEgwVUZlMmZxOWRzNktwWGZFeWxCVGY5R2Jycml2bFIK",
-      "endpoints": [
-        "https://github.com/hanhan761/forbb/releases/latest/download/latest.json"
-      ]
     }
   }
 }

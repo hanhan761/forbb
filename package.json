@@ -1,12 +1,12 @@
 {
   "name": "nexq",
   "private": true,
-  "version": "2.20.11",
+  "version": "2.20.12",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:remote": "node scripts/build-remote.js",
+    "tauri:build": "node scripts/build.js",
     "preview": "vite preview",
     "tauri": "tauri",
     "release": "node scripts/release.js",
@@ -23,7 +23,6 @@
     "@tauri-apps/plugin-process": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
     "@tauri-apps/plugin-store": "^2.0.0",
-    "@tauri-apps/plugin-updater": "^2.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.400.0",

@@ -54,8 +54,6 @@ use commands::translation_commands;
 use commands::translation_model_commands;
 // == MODULE COMMANDS: tray ==
 use commands::tray_commands;
-// == MODULE COMMANDS: updater ==
-use commands::updater_commands;
 
 /// Enable live blur-behind on a window via the undocumented `SetWindowCompositionAttribute`
 /// (user32). `DwmEnableBlurBehindWindow` (used automatically by tao for `transparent: true`)
@@ -201,7 +199,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_updater::Builder::default().build())
         .setup(|app| {
             let mut app_state = AppState::new();
 
@@ -716,10 +713,6 @@ pub fn run() {
             translation_model_commands::delete_opus_mt_model,
             #[cfg(feature = "local-ai")]
             translation_model_commands::activate_opus_mt_model,
-            // == COMMANDS: updater ==
-            updater_commands::check_for_update,
-            updater_commands::download_and_install_update,
-            updater_commands::restart_for_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NexQ");

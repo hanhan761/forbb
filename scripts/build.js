@@ -1,18 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const buildArgs = [
-  "build",
-  "--features",
-  "remote-only",
-  "--",
-  "--no-default-features",
-];
+const buildArgs = ["build"];
 
 // Local source builds normally do not have the release signing secret. Keep
-// the installer build usable in that case; CI signs it when the secret exists.
+// the single shipped installer build usable in that case.
 if (!process.env.TAURI_SIGNING_PRIVATE_KEY?.trim()) {
-  buildArgs.splice(1, 0, "--no-sign");
+  buildArgs.push("--no-sign");
 }
 
 const result = spawnSync(
@@ -20,10 +14,7 @@ const result = spawnSync(
   [fileURLToPath(new URL("../node_modules/@tauri-apps/cli/tauri.js", import.meta.url)), ...buildArgs],
   {
     stdio: "inherit",
-    env: {
-      ...process.env,
-      VITE_NEXQ_REMOTE_ONLY: "true",
-    },
+    env: process.env,
   },
 );
 

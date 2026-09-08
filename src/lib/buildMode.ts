@@ -1,7 +1,7 @@
 import type { LLMProviderType, STTProviderType, TranslationProviderType } from "./types";
 
-/** True for the small installer that delegates AI inference to cloud APIs. */
-export const REMOTE_ONLY = import.meta.env.VITE_NEXQ_REMOTE_ONLY === "true";
+/** NexQ ships as one product: the Simplified Chinese, pure API build. */
+export const REMOTE_ONLY = true;
 
 export const REMOTE_STT_PROVIDERS: readonly STTProviderType[] = [
   "deepgram",

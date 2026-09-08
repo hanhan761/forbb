@@ -1,14 +1,15 @@
 [package]
 name = "nexq"
-version = "2.20.11"
+version = "2.20.12"
 description = "AI Meeting Assistant & Real-Time Interview Copilot"
 authors = ["NexQ"]
 edition = "2021"
 
 [features]
-# Keep the existing all-in-one desktop build as the default. The remote-only
-# installer opts out of this feature so local inference crates are never built.
-default = ["local-ai"]
+# NexQ ships one product: the Simplified Chinese, pure API build. The legacy
+# local-ai feature remains opt-in for source compatibility, but is not part of
+# the default build or any release workflow.
+default = ["remote-only"]
 local-ai = [
     "dep:whisper-rs",
     "dep:sha2",
@@ -43,7 +44,6 @@ tauri-plugin-os = "2"
 tauri-plugin-process = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
-tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

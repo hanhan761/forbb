@@ -1,231 +1,74 @@
 <p align="center">
   <img src="public/nexq-icon.png" alt="NexQ" width="120">
 </p>
+
+<h1 align="center">NexQ 纯 API 中文版</h1>
+
 <p align="center">
-  <strong>AI Meeting Assistant & Real-Time Interview Copilot</strong>
+  Windows AI 会议助手：本地采集音频和保存会议记录，AI 能力通过云端 API 完成。
 </p>
 
 <p align="center">
 
 [![Release](https://img.shields.io/github/v/release/hanhan761/forbb?style=flat-square&color=blue)](https://github.com/hanhan761/forbb/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/hanhan761/forbb/release.yml?style=flat-square&label=构建)](https://github.com/hanhan761/forbb/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/hanhan761/forbb/release.yml?style=flat-square&label=build)](https://github.com/hanhan761/forbb/actions/workflows/release.yml)
-[![Downloads](https://img.shields.io/github/downloads/hanhan761/forbb/total?style=flat-square&color=orange)](https://github.com/hanhan761/forbb/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?style=flat-square&logo=windows)](https://github.com/hanhan761/forbb/releases)
-[![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?style=flat-square&logo=tauri&logoColor=white)](https://v2.tauri.app/)
-[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
-[![Rust](https://img.shields.io/badge/Rust-stable-DEA584?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 
 </p>
 
-<p align="center">
-  <img src="website/public/screenshots/live-meeting-demo.gif" alt="NexQ in action — live meeting with transcript, translation, and AI assist" width="700">
-</p>
-<p align="center"><em>NexQ overlay during a live interview — real-time transcription and AI suggestions</em></p>
+## 版本定位
 
-<p align="center">
-  <img src="docs/assets/readme-feature-overview.png" alt="NexQ feature overview — system audio, live transcription, translation, and local knowledge base" width="900">
-</p>
-<p align="center"><em>System-audio loopback, live transcription, bilingual translation, and local knowledge retrieval in one assistive overlay</em></p>
+这个仓库只维护一个版本：**简体中文、纯 API、Windows 安装版**。
 
-### Why NexQ?
+- 不包含本地 Whisper、Ollama、ONNX 或其他本地 AI 模型。
+- 语音识别、翻译和大语言模型使用你配置的云端 API。
+- 麦克风/系统声音采集、录音、会议历史和 SQLite 关键词检索保留在本地。
+- 应用界面、设置、弹窗、托盘、悬浮窗和 Windows 安装器均为简体中文。
 
-🔒 **Local-first** — personal files, indexes, sessions, and recordings stay local; cloud services are opt-in
+## 下载安装
 
-🆓 **Free & Open Source** — no subscriptions, no limits, ever
+当前版本：[NexQ_2.20.12_x64-setup.exe](https://github.com/hanhan761/forbb/releases/download/v2.20.12/NexQ_2.20.12_x64-setup.exe)
 
-⚡ **10 STT + 9 LLM providers** — from local Whisper, Ollama, and Codex to cloud Deepgram & OpenAI
+也可以打开 [GitHub Releases](https://github.com/hanhan761/forbb/releases)，下载名称以 **NexQ 纯 API 中文版** 开头的最新 `x64-setup.exe`。
 
-## Features
+安装器使用当前用户模式，不需要管理员权限，也不需要安装 Node.js、Rust 或本地模型。
 
-- **Dual-party transcription** — captures mic ("You") and system audio ("Them") simultaneously
-- **Real-time AI copilot** — get streaming, speakable answers and follow-up suggestions from local Codex or other LLM providers
-- **Local RAG pipeline** — index your own documents (PDF, DOCX, TXT, MD) for context-aware AI responses
-- **Obsidian Vault import** — bring a local Markdown Vault into the knowledge base without an Obsidian plugin
-- **Interview Query Router** — automatically choose direct Codex, local files, or web search and show source/confidence metadata
-- **Interview preparation + review** — check devices/services before starting, save bilingual transcripts, and write a dated review back to Obsidian
-- **Mock Interview** — text-only practice with follow-up questions and coaching across technical accuracy, English, structure, confidence, and profile consistency
-- **Gemini Context Cache** — upload documents to Gemini once, skip local embedding entirely for ~3-5s faster queries
-- **10 STT providers** — Web Speech API, Deepgram, Groq, Whisper, ONNX Runtime, and more
-- **Always-on-top overlay** — compact, transparent floating window visible only to you
-- **Bookmarks & action items** — pin key moments and auto-extract tasks
-- **Speaker labeling** — identify and name each speaker in the transcript
-- **Multi-language translation** — real-time translation via 5 providers (100+ languages)
-- **Audio recording & playback** — record meetings as WAV, replay with synced transcript
-- **Meeting scenarios** — pre-configured templates for interviews, lectures, and team meetings
+升级时直接下载新安装包并运行即可，不需要先卸载旧版本；应用设置和会议历史通常会保留。
 
-## Installation
+## 配置 API
 
-### Windows users: install the pure API version
+安装后打开“设置”，按需配置：
 
-The pure API version is the prebuilt **Remote-only** installer. It does not require
-Node.js, Rust, the Tauri CLI, or local AI model downloads.
+- **语音识别：** Deepgram、OpenAI Whisper、Azure Speech、Groq Whisper
+- **大语言模型：** OpenAI、Qwen、Anthropic、Groq、Gemini、OpenRouter 或自定义 API
+- **翻译：** Microsoft、Google、DeepL 或远程 LLM
 
-**Current direct download:** [NexQ_2.20.11_x64-setup.exe](https://github.com/hanhan761/forbb/releases/download/remote-v2.20.11/NexQ_2.20.11_x64-setup.exe)
+API 密钥通过应用的凭据管理器保存，不写入仓库，也不会硬编码到程序中。
 
-该版本为简体中文版本：应用界面、设置、弹窗、托盘菜单、悬浮窗和 Windows 安装器均已汉化。
-
-1. Open the [Releases](https://github.com/hanhan761/forbb/releases) page.
-2. Open the latest release whose name starts with **NexQ 纯 API 中文版**.
-3. Download the `x64-setup.exe` asset and run it. The installer uses the current-user
-   install mode and does not require administrator privileges.
-4. In NexQ Settings, configure the cloud STT, translation, and LLM API keys.
-
-This version keeps audio capture, meeting history, recording, and the UI on the
-device. Speech recognition, translation, and LLM requests use the configured cloud
-APIs. It does not include local Whisper, Ollama embeddings, or other local AI
-engines; document search uses local SQLite keyword search.
-
-> End users should download the installer above. Do not run `npm install` or
-> `npx tauri build` unless you are building the application from source.
-
-After installation, continue with the [Getting Started Guide](docs/user-guide/getting-started.md)
-or browse the [full user guides](docs/user-guide/).
-
-For live interviews, follow the meeting platform, school, and local consent rules for recording and AI assistance.
-
-### Developer build: Remote-only from source
-
-NexQ also provides a smaller remote-only desktop build for machines that should not
-download or run local AI models. It keeps microphone/system-audio capture, the local
-SQLite meeting history, recording, and the UI on the device, while sending speech
-recognition, translation, and LLM requests to the configured cloud APIs. Document RAG
-uses local SQLite keyword search; Ollama embeddings are not included or started.
-
-This path compiles the Tauri/Rust application and is intended for maintainers and
-developers, not end users.
-
-Build it from source with:
+## 从源码构建
 
 ```bash
 npm ci
-npm run build:remote
+npm run tauri:build
 ```
 
-The `build:remote` command disables Cargo's default `local-ai` feature. Do not replace
-it with `npx tauri build`, or omit `--no-default-features` from the remote build, because
-that will compile the slower all-in-one local AI version. The remote-only build requires
-API keys for the selected STT, translation, and LLM providers; those keys are stored
-through NexQ's credential manager and are not hard-coded into the app.
+默认构建就是纯 API 中文版。普通用户不需要执行源码构建，直接下载安装包即可。
 
-Remote-only installers are published by the
-[remote release workflow](.github/workflows/release-remote.yml) for tags matching
-`remote-v*`. To publish one, push a tag such as `remote-v2.20.11`, or run the
-workflow manually from GitHub Actions and provide the tag as an input. A release
-must be published before end users can download the installer.
+## 发布
 
-## Gemini Context Cache
-
-For users running NexQ on a laptop without a dedicated GPU, local embedding can add 2–5 seconds of latency per AI query. The **Gemini Context Cache** feature eliminates this entirely.
-
-Instead of embedding documents locally via Ollama on every query, NexQ uploads your context documents to Gemini's servers once per meeting session. Gemini pre-processes and stores the KV state. Every subsequent query skips local embedding completely — only the live transcript and your question are sent fresh.
-
-**Setup:**
-1. Load your context documents (PDF, DOCX, TXT) in the Context panel
-2. Go to **Settings → Context Strategy**
-3. Select **Gemini Context Cache**
-4. Choose your model and TTL, then click **Create Cache from Context Docs**
-
-**Requirements:** Google Gemini API key, documents loaded in context.
-
-**Speed comparison (CPU-only laptop):**
-
-| Mode | Per-query overhead | Notes |
-|------|-------------------|-------|
-| Local RAG (`all-minilm`) | ~1–2s | Fastest local option |
-| Local RAG (`nomic-embed-text`) | ~3–5s | Default model |
-| **Gemini Context Cache** | **~0s** | No local embedding at all |
-
-Cache expires after your chosen TTL (30 min – 24 hours). Delete it early from the same settings panel.
-
-## Why NexQ vs. Others?
-
-| | NexQ | Otter.ai | Granola | Krisp |
-|---|:---:|:---:|:---:|:---:|
-| **Price** | **Free** | $8+/mo | $18/mo | $16/mo |
-| **100% Local** | Yes | No | Partial | Partial |
-| **Open Source** | Yes | No | No | No |
-| **No Bot Joins** | Yes | No | Yes | Yes |
-| **STT Providers** | **10** | 1 | 1 | 1 |
-| **LLM Providers** | **8** | 1 | 1 | 1 |
-| **Local LLM** | Yes | No | No | No |
-| **RAG / Doc Context** | Yes | No | No | No |
-
-## Screenshots
-
-| Live Interview | Lecture Mode | Past Meeting Review |
-|:---:|:---:|:---:|
-| ![Interview](website/public/screenshots/Interview.png) | ![Lecture](website/public/screenshots/Lecture.png) | ![Past Meeting](website/public/screenshots/Past-meeting.png) |
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Desktop | Tauri 2 (Rust + WebView2) |
-| Frontend | React 18, TypeScript 5.5, Vite 6 |
-| State | Zustand 4.5 |
-| Styling | Tailwind CSS 3.4, shadcn/ui |
-| Audio | cpal, WASAPI (Windows loopback) |
-| STT | whisper-rs, ONNX Runtime, Deepgram, Groq, Web Speech API |
-| LLM | Local Codex app-server, OpenAI, Anthropic, Groq, Ollama, LM Studio, Gemini |
-| Database | SQLite (rusqlite) |
-
-## Development
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) 20+
-- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain)
-- [Tauri CLI](https://v2.tauri.app/start/prerequisites/) (`npm install -g @tauri-apps/cli`)
-
-### Setup
+发布流程只有一个：[纯 API 中文版发布工作流](.github/workflows/release.yml)。
 
 ```bash
-# Clone the repository
-git clone https://github.com/hanhan761/forbb.git
-cd forbb
-
-# Install frontend dependencies
-npm install
-
-# Run in development mode (launches Rust backend + React frontend)
-npx tauri dev
-
-# Build production installer
-npx tauri build
+git tag v2.20.12
+git push origin v2.20.12
 ```
 
-### Other Commands
+推送 `v*` 标签后，GitHub Actions 会构建并发布 Windows `x64-setup.exe` 安装包。
 
-```bash
-npm run dev       # Vite dev server only (port 5173)
-npm run build     # TypeScript check + Vite production build
-npm run build:remote # Remote-only Tauri installer without local AI features
-```
+## 隐私说明
 
-## Windows SmartScreen
+音频、录音、会议历史和本地索引默认保存在设备上。只有在调用语音识别、翻译或 LLM 时，相关内容才会发送到你配置的云端服务。请根据会议平台、学校或当地法规处理录音和 AI 辅助事宜。
 
-When you first run NexQ, Windows SmartScreen may display a warning. This is normal for open-source applications that are not code-signed. To proceed:
+## 许可证
 
-1. Click **"More info"**
-2. Click **"Run anyway"**
-
-Code signing certificates are expensive and not feasible for most open-source projects. The application is safe to run — you can verify by building from source.
-
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## License
-
-[MIT License](LICENSE) — free forever.
-
-## Acknowledgments
-
-- [Tauri](https://tauri.app/) — desktop application framework
-- [React](https://react.dev/) — user interface library
-- [whisper-rs](https://github.com/tazz4843/whisper-rs) — Rust bindings for OpenAI Whisper
-- [Deepgram](https://deepgram.com/) — speech-to-text API
-- [shadcn/ui](https://ui.shadcn.com/) — UI component library
+[MIT License](LICENSE)

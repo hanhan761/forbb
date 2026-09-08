@@ -1,3 +1,11 @@
+## [2.20.12] (2026-09-08)
+
+### Changes
+
+* **release:** make the Simplified Chinese pure API build the only default product and release workflow
+* **build:** stop compiling local AI dependencies in the default Rust build
+* **docs:** replace dual-build instructions with a concise Chinese installation guide
+
 ## [2.20.11] (2026-09-08)
 
 ### Features
