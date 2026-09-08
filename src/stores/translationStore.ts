@@ -171,7 +171,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       const resolvedProvider = providerMigrated ? "llm" as TranslationProviderType : provider;
       if (providerMigrated) {
         await store.set("provider", resolvedProvider);
-        console.log("[translationStore] Remote-only: migrated translation provider to remote LLM");
+        console.log("[translationStore] Qwen-only: migrated translation provider to Qwen LLM");
       }
 
       set({

@@ -161,7 +161,6 @@ export function ModeButtons({ compact = false }: { compact?: boolean }) {
             <option value="quick_answer">Quick</option>
             <option value="search_files">My files</option>
             <option value="search_web">Web</option>
-            <option value="ask_codex">Codex</option>
           </select>
         </label>
         <label className="flex items-center gap-1 rounded-lg border border-border/20 px-1.5 py-1 text-[0.6rem] text-muted-foreground/60" title="Choose answer length">

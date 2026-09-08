@@ -5,7 +5,7 @@ use crate::stt::provider::{self, STTProviderType};
 
 /// Switch the active STT provider.
 ///
-/// `provider` is one of: "windows_native", "deepgram", "whisper_api", "azure_speech", "groq_whisper"
+/// `provider` is the Qwen-only remote provider: "qwen_asr".
 #[command]
 pub async fn set_stt_provider(app: AppHandle, provider: String) -> Result<(), String> {
     let provider_type = STTProviderType::from_str(&provider)
@@ -32,6 +32,11 @@ pub async fn set_stt_provider(app: AppHandle, provider: String) -> Result<(), St
     if let Some(ref cred_arc) = state.credentials {
         if let Ok(cred) = cred_arc.lock() {
             match provider_type {
+                STTProviderType::QwenAsr => {
+                    if let Ok(Some(key)) = cred.get_key("qwen") {
+                        router.set_qwen_api_key(&key);
+                    }
+                }
                 STTProviderType::Deepgram => {
                     if let Ok(Some(key)) = cred.get_key("deepgram") {
                         router.set_deepgram_api_key(&key);
@@ -104,6 +109,11 @@ pub async fn test_stt_connection(app: AppHandle, provider: String) -> Result<boo
     if let Some(ref cred_arc) = state.credentials {
         if let Ok(cred) = cred_arc.lock() {
             match provider_type {
+                STTProviderType::QwenAsr => {
+                    if let Ok(Some(key)) = cred.get_key("qwen") {
+                        router.set_qwen_api_key(&key);
+                    }
+                }
                 STTProviderType::Deepgram => {
                     if let Ok(Some(key)) = cred.get_key("deepgram") {
                         router.set_deepgram_api_key(&key);

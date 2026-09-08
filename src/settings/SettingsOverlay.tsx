@@ -3,8 +3,7 @@ import { useMeetingStore } from "../stores/meetingStore";
 import { useConfigStore } from "../stores/configStore";
 import { GeneralSettings } from "./GeneralSettings";
 import { AboutSettings } from "./AboutSettings";
-import { LLMSettings } from "./LLMSettings";
-import { STTSettings } from "./STTSettings";
+import { QwenSettings } from "./QwenSettings";
 import { HotkeySettings } from "./HotkeySettings";
 import { MeetingAudioSettings } from "./MeetingAudioSettings";
 import { ScenarioSettings } from "./ScenarioSettings";
@@ -12,8 +11,6 @@ import { NoisePresetSettings } from "./NoisePresetSettings";
 import { ConfidenceSettings } from "./ConfidenceSettings";
 import {
   X,
-  Brain,
-  Mic,
   Keyboard,
   SlidersHorizontal,
   Info,
@@ -24,14 +21,12 @@ import {
   Theater,
   Volume2,
   BarChart2,
-  Globe,
 } from "lucide-react";
 import { ContextStrategySettings } from "./ContextStrategySettings";
 import { AIActionsSettings } from "./AIActionsSettings";
-import { TranslationSettings } from "./TranslationSettings";
 import { Sparkles } from "lucide-react";
 
-type SettingsTab = "meeting_audio" | "llm" | "stt" | "translation" | "ai_actions" | "context_strategy" | "scenarios" | "noise_presets" | "confidence" | "hotkeys" | "general" | "about";
+type SettingsTab = "meeting_audio" | "qwen" | "ai_actions" | "context_strategy" | "scenarios" | "noise_presets" | "confidence" | "hotkeys" | "general" | "about";
 
 // ── Tab groups for sidebar (contextually organized, importance-ordered) ──
 interface TabItem {
@@ -55,9 +50,7 @@ const TAB_GROUPS: TabGroup[] = [
   {
     label: "Providers",
     items: [
-      { id: "llm", label: "LLM Providers", icon: <Brain className="h-4 w-4" /> },
-      { id: "stt", label: "STT Providers", icon: <Mic className="h-4 w-4" /> },
-      { id: "translation", label: "Translation", icon: <Globe className="h-4 w-4" /> },
+      { id: "qwen", label: "Qwen API", icon: <Sparkles className="h-4 w-4" /> },
     ],
   },
   {
@@ -145,8 +138,8 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
     switch (activeTab) {
       case "meeting_audio":
         return <MeetingAudioSettings />;
-      case "llm":
-        return <LLMSettings />;
+      case "qwen":
+        return <QwenSettings />;
       case "ai_actions":
         return <AIActionsSettings />;
       case "context_strategy":
@@ -157,10 +150,6 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
         return <NoisePresetSettings />;
       case "confidence":
         return <ConfidenceSettings />;
-      case "stt":
-        return <STTSettings />;
-      case "translation":
-        return <TranslationSettings />;
       case "hotkeys":
         return <HotkeySettings />;
       case "general":
@@ -185,7 +174,7 @@ export function SettingsOverlay({ isModal = false }: SettingsOverlayProps) {
   const currentTabLabel = TAB_LABELS[activeTab] ?? "Settings";
 
   // Wider content area for two-column settings pages
-  const contentMaxW = activeTab === "ai_actions" || activeTab === "translation" ? "max-w-4xl" : "max-w-2xl";
+  const contentMaxW = activeTab === "ai_actions" || activeTab === "qwen" ? "max-w-4xl" : "max-w-2xl";
 
   // ─── Modal mode: render as overlay dialog ───
   if (isModal) {

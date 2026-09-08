@@ -119,7 +119,7 @@ export function AboutSettings() {
       {/* Footer */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-5">
         <p className="text-xs text-muted-foreground/60 leading-relaxed">
-          "纯 API 中文版：音频采集和会议历史保留在本地，语音识别、翻译和 AI 推理使用云端 API。更新时请从 GitHub Releases 下载新的安装包。"
+          "Qwen 纯 API 中文版：音频采集和会议历史保留在本地，语音识别、翻译和 AI 推理统一使用 Qwen。更新时请从 GitHub Releases 下载新的安装包。"
         </p>
       </div>
     </div>

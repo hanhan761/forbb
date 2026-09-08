@@ -4,30 +4,18 @@ import type { LLMProviderType, STTProviderType, TranslationProviderType } from "
 export const REMOTE_ONLY = true;
 
 export const REMOTE_STT_PROVIDERS: readonly STTProviderType[] = [
-  "deepgram",
-  "whisper_api",
-  "azure_speech",
-  "groq_whisper",
+  "qwen_asr",
 ];
 
 export const REMOTE_LLM_PROVIDERS: readonly LLMProviderType[] = [
-  "openai",
   "qwen",
-  "anthropic",
-  "groq",
-  "gemini",
-  "openrouter",
-  "custom",
 ];
 
 export const REMOTE_TRANSLATION_PROVIDERS: readonly TranslationProviderType[] = [
-  "microsoft",
-  "google",
-  "deepl",
   "llm",
 ];
 
-export const DEFAULT_REMOTE_STT_PROVIDER: STTProviderType = "deepgram";
+export const DEFAULT_REMOTE_STT_PROVIDER: STTProviderType = "qwen_asr";
 
 export function isRemoteSttProvider(provider: string): provider is STTProviderType {
   return REMOTE_STT_PROVIDERS.includes(provider as STTProviderType);

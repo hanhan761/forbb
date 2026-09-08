@@ -61,6 +61,8 @@ impl Default for STTProviderConfig {
 /// Supported STT provider types.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum STTProviderType {
+    /// Qwen3-ASR-Flash through the shared Qwen API key.
+    QwenAsr,
     WindowsNative,
     Deepgram,
     /// Sub-PRD 9: OpenAI Whisper REST API
@@ -86,6 +88,7 @@ pub enum STTProviderType {
 impl STTProviderType {
     pub fn as_str(&self) -> &str {
         match self {
+            STTProviderType::QwenAsr => "qwen_asr",
             STTProviderType::WindowsNative => "windows_native",
             STTProviderType::Deepgram => "deepgram",
             STTProviderType::WhisperApi => "whisper_api",
@@ -101,6 +104,7 @@ impl STTProviderType {
 
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
+            "qwen_asr" => Some(STTProviderType::QwenAsr),
             "windows_native" => Some(STTProviderType::WindowsNative),
             "whisper_cpp" => Some(STTProviderType::WhisperCpp),
             "deepgram" => Some(STTProviderType::Deepgram),
@@ -162,6 +166,24 @@ pub struct STTProviderInfo {
 /// List of available providers with metadata.
 pub fn list_available_providers() -> Vec<STTProviderInfo> {
     let providers = vec![
+        STTProviderInfo {
+            provider_type: "qwen_asr".to_string(),
+            name: "Qwen ASR".to_string(),
+            requires_api_key: true,
+            is_local: false,
+            supported_languages: vec![
+                "zh".to_string(),
+                "en".to_string(),
+                "ja".to_string(),
+                "ko".to_string(),
+                "fr".to_string(),
+                "de".to_string(),
+                "es".to_string(),
+                "it".to_string(),
+                "pt".to_string(),
+                "ru".to_string(),
+            ],
+        },
         STTProviderInfo {
             provider_type: "web_speech".to_string(),
             name: "Web Speech API".to_string(),
@@ -368,7 +390,10 @@ pub fn list_available_providers() -> Vec<STTProviderInfo> {
     ];
 
     #[cfg(not(feature = "local-ai"))]
-    return providers.into_iter().filter(|provider| !provider.is_local).collect();
+    return providers
+        .into_iter()
+        .filter(|provider| provider.provider_type == "qwen_asr")
+        .collect();
 
     #[cfg(feature = "local-ai")]
     providers

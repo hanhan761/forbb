@@ -4,8 +4,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Brain, Mic, MicOff, Volume2, VolumeX, Zap, Cpu, Sparkles,
-  ChevronUp, CheckCircle, Globe, Monitor, HardDrive, Cloud,
+  Brain, Mic, MicOff, Volume2, VolumeX, Zap, Sparkles,
+  ChevronUp, CheckCircle, Globe, HardDrive, Cloud,
 } from "lucide-react";
 import { useConfigStore } from "../stores/configStore";
 import { useStreamStore } from "../stores/streamStore";
@@ -33,6 +33,7 @@ const LLM_LABELS: Record<string, string> = {
 };
 
 const STT_LABELS: Record<string, string> = {
+  qwen_asr: "Qwen 语音识别",
   web_speech: "Web Speech",
   whisper_cpp: "Whisper.cpp",
   deepgram: "Deepgram",
@@ -56,25 +57,16 @@ const STT_PROVIDER_OPTIONS: {
   inputOnly?: boolean;
   requiresDownload?: string;
 }[] = [
-  { value: "web_speech", label: "Web Speech", IconComponent: Globe, requiresKey: false, isCloud: false, inputOnly: true },
-  { value: "windows_native", label: "Windows Speech", IconComponent: Monitor, requiresKey: false, isCloud: false, inputOnly: true },
-  { value: "sherpa_onnx", label: "Sherpa-ONNX", IconComponent: HardDrive, requiresKey: false, isCloud: false, requiresDownload: "sherpa_onnx" },
-  { value: "ort_streaming", label: "ORT Streaming", IconComponent: Zap, requiresKey: false, isCloud: false, requiresDownload: "ort_streaming" },
-  { value: "parakeet_tdt", label: "Parakeet TDT", IconComponent: Cpu, requiresKey: false, isCloud: false, requiresDownload: "parakeet_tdt" },
-  { value: "deepgram", label: "Deepgram", IconComponent: Cloud, requiresKey: true, isCloud: true },
-  { value: "whisper_api", label: "Whisper API", IconComponent: Cloud, requiresKey: true, isCloud: true },
-  { value: "azure_speech", label: "Azure Speech", IconComponent: Cloud, requiresKey: true, isCloud: true },
-  { value: "groq_whisper", label: "Groq Whisper", IconComponent: Zap, requiresKey: true, isCloud: true },
+  { value: "qwen_asr", label: "Qwen 语音识别", IconComponent: Sparkles, requiresKey: true, isCloud: true },
 ];
 
 // ── Web Speech / Windows Speech mutual exclusion ──
 // These providers capture from the OS default mic via a single SpeechRecognition instance.
 // Only one can be active across both parties at any time.
-const EXCLUSIVE_PROVIDERS: STTProviderType[] = ["web_speech", "windows_native"];
+const EXCLUSIVE_PROVIDERS: STTProviderType[] = [];
 
 const EXCLUSIVE_FALLBACK_ORDER: STTProviderType[] = [
-  "deepgram", "groq_whisper", "whisper_api", "azure_speech",
-  "sherpa_onnx", "ort_streaming", "parakeet_tdt",
+  "qwen_asr",
 ];
 
 function isExclusiveProvider(provider: string): boolean {
@@ -89,16 +81,7 @@ const LLM_PROVIDER_OPTIONS: {
   requiresKey: boolean;
   isLocal: boolean;
 }[] = [
-  { value: "codex", label: "Codex (local)", IconComponent: Brain, requiresKey: false, isLocal: true },
-  { value: "ollama", label: "Ollama", IconComponent: Monitor, requiresKey: false, isLocal: true },
-  { value: "lm_studio", label: "LM Studio", IconComponent: Monitor, requiresKey: false, isLocal: true },
-  { value: "openai", label: "OpenAI", IconComponent: Cloud, requiresKey: true, isLocal: false },
   { value: "qwen", label: "Qwen", IconComponent: Sparkles, requiresKey: REMOTE_ONLY, isLocal: false },
-  { value: "anthropic", label: "Anthropic", IconComponent: Cloud, requiresKey: true, isLocal: false },
-  { value: "groq", label: "Groq", IconComponent: Zap, requiresKey: true, isLocal: false },
-  { value: "gemini", label: "Gemini", IconComponent: Cloud, requiresKey: true, isLocal: false },
-  { value: "openrouter", label: "OpenRouter", IconComponent: Globe, requiresKey: true, isLocal: false },
-  { value: "custom", label: "Custom", IconComponent: HardDrive, requiresKey: false, isLocal: false },
 ];
 
 function formatModel(model: string): string {
@@ -659,7 +642,7 @@ function STTPickerDropdown({
     let cancelled = false;
     (async () => {
       try {
-        const cloudProviders = ["deepgram", "whisper_api", "azure_speech", "groq_whisper"];
+        const cloudProviders = ["qwen"];
         const engines = REMOTE_ONLY ? [] : await listLocalSTTEngines();
         const keyResults = await Promise.all(cloudProviders.map(async (p) => {
           try { return { p, ok: await hasApiKey(p) }; }

@@ -41,6 +41,7 @@ fn credentials_ready(state: &AppState, provider: &STTProviderType) -> bool {
     };
 
     let key_name = match provider {
+        STTProviderType::QwenAsr => Some("qwen"),
         STTProviderType::Deepgram => Some("deepgram"),
         STTProviderType::WhisperApi => Some("whisper_api"),
         STTProviderType::AzureSpeech => Some("azure_speech"),
@@ -77,7 +78,8 @@ fn stt_provider_status(state: &AppState, providers: &[String]) -> PrepareCheck {
         labels.push(label);
         let needs_credentials = matches!(
             provider,
-            STTProviderType::Deepgram
+            STTProviderType::QwenAsr
+                | STTProviderType::Deepgram
                 | STTProviderType::WhisperApi
                 | STTProviderType::AzureSpeech
                 | STTProviderType::GroqWhisper

@@ -731,6 +731,11 @@ export const useConfigStore = create<ConfigState>((set) => ({
       const activeWhisperModel = await store.get<string | null>("activeWhisperModel");
       const whisperDualPass = await store.get<WhisperDualPassConfig>("whisperDualPass");
       const contextStrategy = await store.get<ContextStrategy>("contextStrategy");
+      const resolvedContextStrategy = contextStrategy === "gemini_cache" ? "local_rag" : contextStrategy;
+      if (contextStrategy === "gemini_cache") {
+        await store.set("contextStrategy", "local_rag");
+        console.log("[configStore] Qwen-only: migrated context strategy to local RAG");
+      }
       const verifiedCloudProviders = await store.get<string[]>("verifiedCloudProviders");
       const deepgramConfig = await store.get<DeepgramConfig>("deepgramConfig");
       const groqConfig = await store.get<GroqConfig>("groqConfig");
@@ -824,9 +829,8 @@ export const useConfigStore = create<ConfigState>((set) => ({
         }
       }
 
-      // Remote-only builds cannot execute browser, Windows, Whisper, Sherpa,
-      // ORT, or Parakeet STT. Normalize old persisted configs before they can
-      // reach the capture pipeline, and remove stale local model references.
+      // The Qwen-only build normalizes every older provider config before it
+      // reaches the capture pipeline, and removes stale local model references.
       if (REMOTE_ONLY && resolvedMeetingConfig) {
         let migrated = false;
         for (const party of ["you", "them"] as const) {
@@ -845,7 +849,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         }
         if (migrated) {
           await store.set("meetingAudioConfig", resolvedMeetingConfig);
-          console.log("[configStore] Remote-only: migrated meeting STT to cloud providers");
+          console.log("[configStore] Qwen-only: migrated meeting STT to qwen_asr");
         }
       }
 
@@ -860,7 +864,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
       } else if (REMOTE_ONLY && !isRemoteSttProvider(resolvedSttProvider ?? "")) {
         resolvedSttProvider = DEFAULT_REMOTE_STT_PROVIDER;
         await store.set("sttProvider", resolvedSttProvider);
-        console.log("[configStore] Remote-only: migrated top-level sttProvider to deepgram");
+        console.log("[configStore] Qwen-only: migrated top-level sttProvider to qwen_asr");
       }
 
       const llmProviderMigrated = REMOTE_ONLY && !isRemoteLlmProvider(llmProvider ?? "");
@@ -871,7 +875,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
       if (llmProviderMigrated) {
         await store.set("llmProvider", resolvedLlmProvider);
         await store.set("llmModel", resolvedLlmModel);
-        console.log("[configStore] Remote-only: migrated LLM provider to qwen");
+        console.log("[configStore] Qwen-only: migrated LLM provider to qwen");
       }
 
       // If no meetingAudioConfig was found after all migrations, create a default (first load only)
@@ -893,7 +897,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
           preset_name: null,
         };
         await store.set("meetingAudioConfig", resolvedMeetingConfig);
-        console.log(`[configStore] Created default meetingAudioConfig (${REMOTE_ONLY ? "cloud STT" : "Web Speech + local Whisper.cpp"})`);
+        console.log(`[configStore] Created default meetingAudioConfig (${REMOTE_ONLY ? "Qwen ASR" : "Web Speech + local Whisper.cpp"})`);
       }
 
       set((state) => ({
@@ -920,7 +924,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         ...(activeWhisperModel !== undefined && { activeWhisperModel }),
         ...(activeModelPerEngine != null && { activeModelPerEngine }),
         ...(whisperDualPass != null && { whisperDualPass }),
-        ...(contextStrategy != null && { contextStrategy }),
+        ...(resolvedContextStrategy != null && { contextStrategy: resolvedContextStrategy }),
         ...(verifiedCloudProviders != null && { verifiedCloudProviders }),
         ...(deepgramConfig != null && { deepgramConfig }),
         ...(groqConfig != null && { groqConfig }),

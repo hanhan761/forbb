@@ -29,15 +29,11 @@ import {
   Mic,
   Volume2,
   RefreshCw,
-  Monitor,
-  Globe,
   HardDrive,
   Cloud,
-  Zap,
   ChevronDown,
   CheckCircle,
   AlertTriangle,
-  Cpu,
   Info,
 } from "lucide-react";
 import { BUILT_IN_PRESETS, type MeetingPreset, applyPreset } from "./presets";
@@ -54,88 +50,10 @@ const STT_OPTIONS: {
   requiresDownload?: string;
 }[] = [
   {
-    value: "web_speech",
-    label: "Web Speech",
-    shortLabel: "Web Speech",
-    icon: <Globe className="h-3.5 w-3.5" />,
-    requiresKey: false,
-    isCloud: false,
-    inputOnly: true,
-  },
-  {
-    value: "windows_native",
-    label: "Windows Speech",
-    shortLabel: "Windows Speech",
-    icon: <Monitor className="h-3.5 w-3.5" />,
-    requiresKey: false,
-    isCloud: false,
-    inputOnly: true,
-  },
-  {
-    value: "whisper_cpp",
-    label: "Whisper.cpp (Local)",
-    shortLabel: "Whisper.cpp",
-    icon: <HardDrive className="h-3.5 w-3.5" />,
-    requiresKey: false,
-    isCloud: false,
-    requiresDownload: "whisper_cpp",
-  },
-  {
-    value: "sherpa_onnx",
-    label: "Sherpa-ONNX",
-    shortLabel: "Sherpa-ONNX",
-    icon: <HardDrive className="h-3.5 w-3.5" />,
-    requiresKey: false,
-    isCloud: false,
-    requiresDownload: "sherpa_onnx",
-  },
-  {
-    value: "ort_streaming",
-    label: "ORT Streaming",
-    shortLabel: "ORT",
-    icon: <Zap className="h-3.5 w-3.5" />,
-    requiresKey: false,
-    isCloud: false,
-    requiresDownload: "ort_streaming",
-  },
-  {
-    value: "parakeet_tdt",
-    label: "Parakeet TDT (Best Local)",
-    shortLabel: "Parakeet",
-    icon: <Cpu className="h-3.5 w-3.5" />,
-    requiresKey: false,
-    isCloud: false,
-    requiresDownload: "parakeet_tdt",
-  },
-  {
-    value: "deepgram",
-    label: "Deepgram",
-    shortLabel: "Deepgram",
+    value: "qwen_asr",
+    label: "通义千问语音识别",
+    shortLabel: "Qwen ASR",
     icon: <Cloud className="h-3.5 w-3.5" />,
-    requiresKey: true,
-    isCloud: true,
-  },
-  {
-    value: "whisper_api",
-    label: "Whisper API",
-    shortLabel: "Whisper API",
-    icon: <Cloud className="h-3.5 w-3.5" />,
-    requiresKey: true,
-    isCloud: true,
-  },
-  {
-    value: "azure_speech",
-    label: "Azure Speech",
-    shortLabel: "Azure",
-    icon: <Cloud className="h-3.5 w-3.5" />,
-    requiresKey: true,
-    isCloud: true,
-  },
-  {
-    value: "groq_whisper",
-    label: "Groq Whisper",
-    shortLabel: "Groq",
-    icon: <Zap className="h-3.5 w-3.5" />,
     requiresKey: true,
     isCloud: true,
   },
@@ -144,11 +62,10 @@ const STT_OPTIONS: {
 // ── Web Speech / Windows Speech mutual exclusion ──
 // These providers capture from the OS default mic via a single SpeechRecognition instance.
 // Only one can be active across both parties at any time.
-const EXCLUSIVE_PROVIDERS: STTProviderType[] = ["web_speech", "windows_native"];
+const EXCLUSIVE_PROVIDERS: STTProviderType[] = [];
 
 const EXCLUSIVE_FALLBACK_ORDER: STTProviderType[] = [
-  "deepgram", "groq_whisper", "whisper_api", "azure_speech",
-  "sherpa_onnx", "ort_streaming", "parakeet_tdt",
+  "qwen_asr",
 ];
 
 const STT_LANGUAGES = [
@@ -203,8 +120,6 @@ export function MeetingAudioSettings() {
     systemDeviceId,
     recordingEnabled,
   } = useConfigStore();
-  const diarizationEnabled = useConfigStore((s) => s.diarizationEnabled);
-  const setDiarizationEnabled = useConfigStore((s) => s.setDiarizationEnabled);
   const sttLanguage = useConfigStore((s) => s.sttLanguage);
   const setSTTLanguage = useConfigStore((s) => s.setSTTLanguage);
 
@@ -233,7 +148,7 @@ export function MeetingAudioSettings() {
       role: "Them",
       device_id: systemDeviceId ?? "default",
       is_input_device: false,
-      stt_provider: "deepgram",
+      stt_provider: DEFAULT_REMOTE_STT_PROVIDER,
     },
     recording_enabled: recordingEnabled,
     preset_name: null,
@@ -307,7 +222,7 @@ export function MeetingAudioSettings() {
   }
 
   async function checkApiKeys() {
-    const providers = ["deepgram", "whisper_api", "azure_speech", "groq_whisper"];
+    const providers = ["qwen"];
     const status: Record<string, boolean> = {};
     for (const p of providers) {
       try {
@@ -316,6 +231,7 @@ export function MeetingAudioSettings() {
         status[p] = false;
       }
     }
+    status.qwen_asr = status.qwen ?? false;
     setApiKeyStatus(status);
   }
 
@@ -455,40 +371,6 @@ export function MeetingAudioSettings() {
           onChange={(updates) => updateParty("them", updates)}
         />
       </div>
-
-      {/* ── Diarization Toggle — only shown when Deepgram or Azure is active ── */}
-      {(["deepgram", "azure_speech"] as STTProviderType[]).some(
-        (p) => config.you.stt_provider === p || config.them.stt_provider === p
-      ) && (
-        <div className="flex items-center justify-between rounded-xl border border-border/20 bg-card/40 px-4 py-3">
-          <div>
-            <p className="text-xs font-medium text-foreground">Speaker Diarization</p>
-            <p className="mt-0.5 text-meta text-muted-foreground/70">
-              Separate speakers in in-person mode (supported by{" "}
-              {[
-                config.you.stt_provider === "deepgram" || config.them.stt_provider === "deepgram" ? "Deepgram" : null,
-                config.you.stt_provider === "azure_speech" || config.them.stt_provider === "azure_speech" ? "Azure" : null,
-              ].filter(Boolean).join(" & ")}
-              )
-            </p>
-          </div>
-          <button
-            onClick={() => setDiarizationEnabled(!diarizationEnabled)}
-            role="switch"
-            aria-checked={diarizationEnabled}
-            aria-label="Toggle speaker diarization"
-            className={`relative h-5 w-9 cursor-pointer rounded-full transition-all duration-200 ${
-              diarizationEnabled ? "bg-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.12)]" : "bg-muted"
-            }`}
-          >
-            <span
-              className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ${
-                diarizationEnabled ? "translate-x-4 scale-105" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-      )}
 
       {/* ── Recording Toggle (full-width row) ── */}
       <div className="flex items-center justify-between rounded-xl border border-border/20 bg-card/40 px-4 py-3">

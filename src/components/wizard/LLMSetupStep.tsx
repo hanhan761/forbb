@@ -1,225 +1,109 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useConfigStore } from "../../stores/configStore";
 import {
-  listModels,
-  setLLMProvider,
-  setActiveModel,
-  storeApiKey,
   getApiKey,
+  setActiveModel,
+  setLLMProvider,
+  setSTTProvider,
+  storeApiKey,
   testLLMConnection,
+  testSTTConnection,
 } from "../../lib/ipc";
-import type { LLMProviderType, ModelInfo } from "../../lib/types";
-import { REMOTE_ONLY } from "../../lib/buildMode";
-import {
-  Server,
-  Cloud,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Eye,
-  EyeOff,
-  Sparkles,
-  Zap,
-  Brain,
-  RefreshCw,
-} from "lucide-react";
+import { CheckCircle, Eye, EyeOff, Loader2, Sparkles, XCircle } from "lucide-react";
 
 interface LLMSetupStepProps {
-  ollamaRunning: boolean;
-  ollamaModels: string[];
-  lmStudioRunning: boolean;
-  lmStudioModels: string[];
+  onReadyChange?: (ready: boolean) => void;
 }
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
-interface ProviderCard {
-  type: LLMProviderType;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  recommended?: boolean;
-  requiresKey: boolean;
-}
+const QWEN_MODEL = "qwen-plus";
 
-const CLOUD_PROVIDERS: ProviderCard[] = [
-  {
-    type: "qwen",
-    label: "Qwen (DashScope)",
-    description: REMOTE_ONLY ? "DashScope cloud API" : "Uses the workspace API from .env",
-    icon: <Sparkles className="h-5 w-5" />,
-    recommended: true,
-    requiresKey: REMOTE_ONLY,
-  },
-  {
-    type: "anthropic",
-    label: "Anthropic",
-    description: "Claude Sonnet, Opus, Haiku",
-    icon: <Brain className="h-5 w-5" />,
-    recommended: true,
-    requiresKey: true,
-  },
-  {
-    type: "openai",
-    label: "OpenAI",
-    description: "GPT-4o, GPT-4, etc.",
-    icon: <Sparkles className="h-5 w-5" />,
-    requiresKey: true,
-  },
-  {
-    type: "groq",
-    label: "Groq",
-    description: "Ultra-fast inference",
-    icon: <Zap className="h-5 w-5" />,
-    requiresKey: true,
-  },
-];
+/** First-run setup for the only supported AI service: Qwen. */
+export function LLMSetupStep({ onReadyChange }: LLMSetupStepProps) {
+  const setConfigProvider = useConfigStore((state) => state.setLLMProvider);
+  const setConfigModel = useConfigStore((state) => state.setLLMModel);
+  const meetingAudioConfig = useConfigStore((state) => state.meetingAudioConfig);
+  const setMeetingAudioConfig = useConfigStore((state) => state.setMeetingAudioConfig);
 
-export function LLMSetupStep({
-  ollamaRunning,
-  ollamaModels,
-  lmStudioRunning,
-  lmStudioModels,
-}: LLMSetupStepProps) {
-  const llmProvider = useConfigStore((s) => s.llmProvider);
-  const llmModel = useConfigStore((s) => s.llmModel);
-  const setConfigProvider = useConfigStore((s) => s.setLLMProvider);
-  const setConfigModel = useConfigStore((s) => s.setLLMModel);
-
-  const hasLocalLLM = !REMOTE_ONLY && (ollamaRunning || lmStudioRunning);
-
-  const [selectedProvider, setSelectedProvider] = useState<LLMProviderType>(
-    "qwen"
-  );
-  const [selectedModel, setSelectedModel] = useState(
-    llmProvider === "qwen" ? llmModel || "" : ""
-  );
-  const [apiKey, setApiKeyValue] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>("idle");
-  const [connectionMessage, setConnectionMessage] = useState("");
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
+  const [status, setStatus] = useState<ConnectionStatus>("idle");
+  const [message, setMessage] = useState("");
 
-  // Auto-load models for local providers
   useEffect(() => {
-    if (selectedProvider === "codex") {
-      handleLoadModels();
-    } else if (selectedProvider === "qwen") {
-      handleLoadModels();
-    } else if (selectedProvider === "ollama" && ollamaRunning) {
-      handleLoadModels();
-    } else if (selectedProvider === "lm_studio" && lmStudioRunning) {
-      handleLoadModels();
+    getApiKey("qwen")
+      .then((key) => {
+        const value = key || "";
+        setApiKey(value);
+        onReadyChange?.(Boolean(value.trim()));
+      })
+      .catch(() => onReadyChange?.(false));
+  }, [onReadyChange]);
+
+  function qwenConfig(key: string) {
+    return JSON.stringify({
+      provider_type: "qwen",
+      api_key: key,
+    });
+  }
+
+  async function syncQwen(key: string) {
+    await storeApiKey("qwen", key);
+    await setLLMProvider(qwenConfig(key));
+    await setActiveModel("qwen", QWEN_MODEL);
+    setConfigProvider("qwen");
+    setConfigModel(QWEN_MODEL);
+    await setSTTProvider("qwen_asr");
+
+    if (meetingAudioConfig) {
+      setMeetingAudioConfig({
+        ...meetingAudioConfig,
+        you: { ...meetingAudioConfig.you, stt_provider: "qwen_asr", local_model_id: undefined },
+        them: { ...meetingAudioConfig.them, stt_provider: "qwen_asr", local_model_id: undefined },
+        preset_name: null,
+      });
     }
-  }, [selectedProvider, apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
-  const requiresApiKey = ["openai", "qwen", "anthropic", "groq", "gemini", "openrouter"].includes(
-    selectedProvider
-  );
-
-  useEffect(() => {
-    if (!requiresApiKey) {
-      setApiKeyValue("");
+  async function handleSave() {
+    const key = apiKey.trim();
+    if (!key) {
+      onReadyChange?.(false);
       return;
     }
-    getApiKey(selectedProvider)
-      .then((key) => setApiKeyValue(key || ""))
-      .catch(() => setApiKeyValue(""));
-  }, [selectedProvider, requiresApiKey]);
-
-  const buildProviderConfig = useCallback(() => {
-    const config: Record<string, unknown> = {
-      provider_type: selectedProvider,
-    };
-    if (apiKey) config.api_key = apiKey;
-    return JSON.stringify(config);
-  }, [selectedProvider, apiKey]);
-
-  async function handleProviderSelect(provider: LLMProviderType) {
-    setSelectedProvider(provider);
-    setSelectedModel("");
-    setModels([]);
-    setConnectionStatus("idle");
-    setConnectionMessage("");
-  }
-
-  async function handleLoadModels() {
-    setModelsLoading(true);
-    setModels([]);
     try {
-      if (apiKey) {
-        await storeApiKey(selectedProvider, apiKey).catch(() => {});
-      }
-      const configJson = buildProviderConfig();
-      await setLLMProvider(configJson).catch(() => {});
-      setConfigProvider(selectedProvider);
-      const modelList = await listModels(configJson);
-      setModels(modelList);
-
-      // Make the workspace default immediately usable without requiring a
-      // second click in the model selector.
-      if (selectedProvider === "qwen" && !selectedModel) {
-        const preferredModel = modelList.some((model) => model.id === "qwen-plus")
-          ? "qwen-plus"
-          : modelList[0]?.id;
-        if (preferredModel) {
-          setSelectedModel(preferredModel);
-          setConfigModel(preferredModel);
-          await setActiveModel(selectedProvider, preferredModel).catch(() => {});
-        }
-      }
-    } catch (err) {
-      console.warn("[LLMSetupStep] Failed to load models:", err);
-    } finally {
-      setModelsLoading(false);
+      await syncQwen(key);
+      onReadyChange?.(true);
+      setMessage("已保存。可以直接进入下一步。");
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "保存失败，请检查 API Key");
     }
   }
 
-  async function handleTestConnection() {
-    setConnectionStatus("testing");
-    setConnectionMessage("");
-    try {
-      if (apiKey) {
-        await storeApiKey(selectedProvider, apiKey).catch(() => {});
-      }
-      const configJson = buildProviderConfig();
-      const success = await testLLMConnection(configJson);
-      if (success) {
-        setConnectionStatus("success");
-        setConnectionMessage("Connected successfully");
-        await setLLMProvider(configJson).catch(() => {});
-        setConfigProvider(selectedProvider);
-      } else {
-        setConnectionStatus("error");
-        setConnectionMessage("Connection failed");
-      }
-    } catch (err) {
-      setConnectionStatus("error");
-      setConnectionMessage(
-        err instanceof Error ? err.message : "Connection failed"
-      );
-    }
-  }
+  async function handleTest() {
+    const key = apiKey.trim();
+    if (!key) return;
 
-  async function handleModelSelect(modelId: string) {
-    setSelectedModel(modelId);
-    setConfigModel(modelId);
-    setConfigProvider(selectedProvider);
+    setStatus("testing");
+    setMessage("");
     try {
-      await setActiveModel(selectedProvider, modelId);
-    } catch {
-      // Non-critical
-    }
-  }
-
-  async function handleSaveApiKey() {
-    if (!apiKey) return;
-    try {
-      await storeApiKey(selectedProvider, apiKey);
-    } catch {
-      // Silently handle
+      await syncQwen(key);
+      const [llmReady, sttReady] = await Promise.all([
+        testLLMConnection(qwenConfig(key)),
+        testSTTConnection("qwen_asr"),
+      ]);
+      if (!llmReady || !sttReady) {
+        throw new Error("Qwen 文本或语音服务连接失败");
+      }
+      setStatus("success");
+      setMessage("连接成功：文本、翻译、语音识别共用这个 Qwen API Key");
+      onReadyChange?.(true);
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "连接失败，请检查 API Key 和网络");
+      onReadyChange?.(Boolean(key));
     }
   }
 
@@ -227,263 +111,80 @@ export function LLMSetupStep({
     <div className="flex flex-col items-center">
       <div className="mb-8 text-center">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 shadow-md shadow-primary/10">
-          <Brain className="h-7 w-7 text-primary" />
+          <Sparkles className="h-7 w-7 text-primary" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground">LLM Configuration</h2>
-        <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-          Choose an AI model to power your meeting assistant.
+        <h2 className="text-2xl font-bold text-foreground">先配置通义千问</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          NexQ 只需要一个 Qwen API Key。文本、翻译和语音识别都会使用它。
         </p>
       </div>
 
-      <div className="w-full max-w-lg space-y-6">
-        {REMOTE_ONLY && (
-          <div className="rounded-xl border border-info/20 bg-info/5 px-5 py-4 text-xs text-info">
-            Remote-only build: local LLMs are excluded. Configure a cloud API key below.
-          </div>
-        )}
-
-        {/* Local LLM Detection Banner */}
-        {!REMOTE_ONLY && hasLocalLLM && (
-          <div className="rounded-xl border border-success/20 bg-success/5 px-5 py-4">
-            <div className="flex items-center gap-2">
-              <Server className="h-4 w-4 text-success" />
-              <p className="text-sm font-medium text-success">
-                Local LLM Detected
-              </p>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {ollamaRunning &&
-                `Ollama is running with ${ollamaModels.length} model${ollamaModels.length !== 1 ? "s" : ""}. `}
-              {lmStudioRunning &&
-                `LM Studio is running with ${lmStudioModels.length} model${lmStudioModels.length !== 1 ? "s" : ""}. `}
-              Your data stays on your machine.
-            </p>
-          </div>
-        )}
-
-        {/* Local Provider Cards */}
-        {!REMOTE_ONLY && <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Local Providers
-            </p>
-            <div className="grid gap-2">
-              <ProviderButton
-                label="Codex (local)"
-                description="Uses your local Codex login via app-server"
-                icon={<Brain className="h-5 w-5" />}
-                selected={selectedProvider === "codex"}
-                recommended
-                onClick={() => handleProviderSelect("codex")}
-              />
-              {ollamaRunning && (
-                <ProviderButton
-                  label="Ollama"
-                  description={`${ollamaModels.length} model${ollamaModels.length !== 1 ? "s" : ""} available`}
-                  icon={<Server className="h-5 w-5" />}
-                  selected={selectedProvider === "ollama"}
-                  recommended
-                  onClick={() => handleProviderSelect("ollama")}
-                />
-              )}
-              {lmStudioRunning && (
-                <ProviderButton
-                  label="LM Studio"
-                  description={`${lmStudioModels.length} model${lmStudioModels.length !== 1 ? "s" : ""} available`}
-                  icon={<Server className="h-5 w-5" />}
-                  selected={selectedProvider === "lm_studio"}
-                  onClick={() => handleProviderSelect("lm_studio")}
-                />
-              )}
-            </div>
-          </div>}
-
-        {/* Cloud Provider Cards */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Cloud Providers
-          </p>
-          <div className="grid gap-2">
-            {CLOUD_PROVIDERS.map((p) => (
-              <ProviderButton
-                key={p.type}
-                label={p.label}
-                description={p.description}
-                icon={p.icon}
-                selected={selectedProvider === p.type}
-                recommended={!hasLocalLLM && p.recommended}
-                onClick={() => handleProviderSelect(p.type)}
-              />
-            ))}
-          </div>
+      <div className="w-full max-w-lg space-y-5">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-sm leading-relaxed text-foreground/80">
+          API Key 只保存在本机系统凭据管理器中，不会写入项目文件。
         </div>
 
-        {/* API Key Input */}
-        {requiresApiKey && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              API Key
-            </label>
-            <div className="relative">
-              <input
-                type={showApiKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKeyValue(e.target.value)}
-                onBlur={handleSaveApiKey}
-                placeholder={`Enter your ${selectedProvider === "qwen" ? "Qwen/DashScope" : selectedProvider === "anthropic" ? "Anthropic" : selectedProvider === "openai" ? "OpenAI" : "Groq"} API key`}
-                aria-label="API key"
-                className="w-full rounded-xl border border-border/40 bg-background px-4 py-3 pr-11 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
-              />
-              <button
-                onClick={() => setShowApiKey(!showApiKey)}
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                aria-pressed={showApiKey}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-              >
-                {showApiKey ? (
-                  <EyeOff className="h-3.5 w-3.5" />
-                ) : (
-                  <Eye className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Stored securely in your system keychain
-            </p>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="qwen-api-key">
+            Qwen API Key
+          </label>
+          <div className="relative">
+            <input
+              id="qwen-api-key"
+              type={showApiKey ? "text" : "password"}
+              value={apiKey}
+              onChange={(event) => {
+                const value = event.target.value;
+                setApiKey(value);
+                setStatus("idle");
+                onReadyChange?.(false);
+              }}
+              onBlur={handleSave}
+              placeholder="sk-..."
+              className="w-full rounded-xl border border-border/40 bg-background px-4 py-3 pr-11 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            />
+            <button
+              type="button"
+              onClick={() => setShowApiKey((visible) => !visible)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+              aria-label={showApiKey ? "隐藏 API Key" : "显示 API Key"}
+            >
+              {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
           </div>
-        )}
+          <p className="text-xs text-muted-foreground">
+            在阿里云百炼控制台创建 API Key，然后粘贴到这里。
+          </p>
+        </div>
 
-        {/* Test Connection & Load Models */}
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={handleTestConnection}
-            disabled={
-              connectionStatus === "testing" ||
-              (requiresApiKey && !apiKey)
-            }
-            className="inline-flex items-center gap-2 rounded-xl border border-border/40 bg-background px-4 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            onClick={handleTest}
+            disabled={status === "testing" || !apiKey.trim()}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {connectionStatus === "testing" ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <CheckCircle className="h-3.5 w-3.5" />
-            )}
-            Test Connection
+            {status === "testing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+            测试 Qwen 连接
           </button>
-          <button
-            onClick={handleLoadModels}
-            disabled={modelsLoading || (requiresApiKey && !apiKey)}
-            className="inline-flex items-center gap-2 rounded-xl border border-border/40 bg-background px-4 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {modelsLoading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3" />
-            )}
-            Load Models
-          </button>
-          {connectionStatus === "success" && (
+          {status === "success" && (
             <span className="flex items-center gap-1 text-xs text-success">
-              <CheckCircle className="h-3 w-3" />
-              {connectionMessage}
+              <CheckCircle className="h-3.5 w-3.5" />
+              {message}
             </span>
           )}
-          {connectionStatus === "error" && (
+          {status === "error" && (
             <span className="flex items-center gap-1 text-xs text-destructive">
-              <XCircle className="h-3 w-3" />
-              {connectionMessage}
+              <XCircle className="h-3.5 w-3.5" />
+              {message}
             </span>
           )}
         </div>
 
-        {/* Model Selection */}
-        {models.length > 0 && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              Select Model
-            </label>
-            <select
-              value={selectedModel}
-              onChange={(e) => handleModelSelect(e.target.value)}
-              className="w-full rounded-xl border border-border/40 bg-background px-4 py-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
-            >
-              <option value="">Choose a model...</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.context_window
-                    ? ` (${Math.round(m.context_window / 1000)}K ctx)`
-                    : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+        {status === "idle" && message && (
+          <p className="text-xs text-success">{message}</p>
         )}
-
-        {/* Recommendation */}
-        <div className="rounded-xl border border-border/20 bg-secondary/20 px-5 py-4">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground">Tip: </span>
-            {selectedProvider === "codex"
-              ? "Codex uses your local CLI login through a hidden stdio app-server. NexQ does not control the meeting window or enter text into it."
-              : selectedProvider === "qwen"
-                ? REMOTE_ONLY
-                  ? "Enter your DashScope API key, test the connection, then choose qwen-plus."
-                  : "Qwen is loaded from the project .env. Test the connection, then choose qwen-plus for the first run."
-              : hasLocalLLM
-                ? "For privacy and speed, we recommend using Ollama with llama3.2. Your conversations never leave your machine."
-              : "For the best experience, we recommend Anthropic Claude. For local privacy, install Ollama and run it before starting NexQ."}
-          </p>
-        </div>
       </div>
     </div>
-  );
-}
-
-function ProviderButton({
-  label,
-  description,
-  icon,
-  selected,
-  recommended,
-  onClick,
-}: {
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  selected: boolean;
-  recommended?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`relative flex items-center gap-4 rounded-xl border px-5 py-4 text-left transition-all duration-150 ${
-        selected
-          ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm"
-          : "border-border/40 hover:border-border/60 hover:bg-accent/20"
-      }`}
-    >
-      <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-          selected
-            ? "bg-primary/10 text-primary"
-            : "bg-secondary/40 text-muted-foreground"
-        }`}
-      >
-        {icon}
-      </div>
-      <div className="flex-1">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      {recommended && (
-        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-meta font-medium text-primary">
-          Recommended
-        </span>
-      )}
-      {selected && (
-        <CheckCircle className="h-4 w-4 shrink-0 text-primary" />
-      )}
-    </button>
   );
 }

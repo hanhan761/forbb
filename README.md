@@ -27,23 +27,25 @@
 
 ## 下载安装
 
-当前版本：[NexQ_2.20.12_x64-setup.exe](https://github.com/hanhan761/forbb/releases/download/v2.20.12/NexQ_2.20.12_x64-setup.exe)
+当前版本：[NexQ_2.20.13_x64-setup.exe](https://github.com/hanhan761/forbb/releases/download/v2.20.13/NexQ_2.20.13_x64-setup.exe)
 
-也可以打开 [GitHub Releases](https://github.com/hanhan761/forbb/releases)，下载名称以 **NexQ 纯 API 中文版** 开头的最新 `x64-setup.exe`。
+也可以打开 [GitHub Releases](https://github.com/hanhan761/forbb/releases)，下载名称以 **NexQ Qwen 纯 API 中文版** 开头的最新 `x64-setup.exe`。
 
 安装器使用当前用户模式，不需要管理员权限，也不需要安装 Node.js、Rust 或本地模型。
 
 升级时直接下载新安装包并运行即可，不需要先卸载旧版本；应用设置和会议历史通常会保留。
 
-## 配置 API
+## 第一次启动
 
-安装后打开“设置”，按需配置：
+打开 NexQ 后，第一步就是配置 **Qwen API Key**。只需要这一把 Key：
 
-- **语音识别：** Deepgram、OpenAI Whisper、Azure Speech、Groq Whisper
-- **大语言模型：** OpenAI、Qwen、Anthropic、Groq、Gemini、OpenRouter 或自定义 API
-- **翻译：** Microsoft、Google、DeepL 或远程 LLM
+- **文本回答、总结、行动项：** Qwen 文本模型
+- **翻译：** Qwen LLM
+- **语音识别：** Qwen3-ASR-Flash，按约 5 秒音频片段识别
 
-API 密钥通过应用的凭据管理器保存，不写入仓库，也不会硬编码到程序中。
+音频采集、录音、会议历史和 SQLite 关键词检索仍然在本机完成。API Key 通过应用的凭据管理器保存，不写入仓库，也不会硬编码到程序中。
+
+Qwen 官方文档：[文本 API](https://help.aliyun.com/en/model-studio/qwen-api-via-openai-chat-completions)、[Qwen ASR](https://help.aliyun.com/en/model-studio/qwen-asr-api-reference)、[创建 API Key](https://help.aliyun.com/zh/model-studio/get-api-key)。
 
 ## 从源码构建
 
@@ -59,8 +61,8 @@ npm run tauri:build
 发布流程只有一个：[纯 API 中文版发布工作流](.github/workflows/release.yml)。
 
 ```bash
-git tag v2.20.12
-git push origin v2.20.12
+git tag v2.20.13
+git push origin v2.20.13
 ```
 
 推送 `v*` 标签后，GitHub Actions 会构建并发布 Windows `x64-setup.exe` 安装包。

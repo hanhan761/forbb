@@ -66,8 +66,8 @@ export function ReadyStep({
               <Mic className="h-3.5 w-3.5 text-primary" />
               <span className="font-medium text-foreground">You:</span>
               <span className="text-muted-foreground">
-                {meetingAudioConfig.you.stt_provider === "web_speech"
-                  ? "Web Speech API"
+                {meetingAudioConfig.you.stt_provider === "qwen_asr"
+                  ? "通义千问语音识别"
                   : meetingAudioConfig.you.stt_provider.replace("_", " ")}
               </span>
             </div>
@@ -75,8 +75,8 @@ export function ReadyStep({
               <Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="font-medium text-foreground">Them:</span>
               <span className="text-muted-foreground">
-                {meetingAudioConfig.them.stt_provider === "web_speech"
-                  ? "Web Speech API"
+                {meetingAudioConfig.them.stt_provider === "qwen_asr"
+                  ? "通义千问语音识别"
                   : meetingAudioConfig.them.stt_provider.replace("_", " ")}
               </span>
             </div>

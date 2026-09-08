@@ -25,49 +25,12 @@ export type DeviceHint =
 
 export const BUILT_IN_PRESETS: MeetingPreset[] = [
   {
-    name: "Zero Setup",
-    description: "Web Speech + local Whisper — download a small model",
-    badge: "Default",
-    you: { hint: "default_mic", stt: "web_speech" },
-    them: { hint: "default_output", stt: "whisper_cpp" },
-    requiresDownload: "whisper_cpp",
-  },
-  {
-    name: "Best Quality",
-    description: "Deepgram cloud — fastest, most accurate",
+    name: "Qwen 云端",
+    description: "通义千问统一处理语音识别和 AI 能力",
     badge: "Recommended",
-    you: { hint: "default_mic", stt: "web_speech" },
-    them: { hint: "default_output", stt: "deepgram" },
-    requiresKey: "deepgram",
-  },
-  {
-    name: "Fully Offline",
-    description: "Sherpa-ONNX — no internet needed",
-    badge: "Free",
-    you: { hint: "default_mic", stt: "sherpa_onnx" },
-    them: { hint: "default_output", stt: "sherpa_onnx" },
-    requiresDownload: "sherpa_onnx",
-  },
-  {
-    name: "All Cloud",
-    description: "Deepgram for both parties",
-    you: { hint: "default_mic", stt: "deepgram" },
-    them: { hint: "default_output", stt: "deepgram" },
-    requiresKey: "deepgram",
-  },
-  {
-    name: "Local Only (Whisper)",
-    description: "Whisper.cpp for both parties — offline, free",
-    you: { hint: "default_mic", stt: "whisper_cpp" },
-    them: { hint: "default_output", stt: "whisper_cpp" },
-    requiresDownload: "whisper_cpp",
-  },
-  {
-    name: "In-Person",
-    description: "Both parties use mic input — Web Speech + Whisper.cpp",
-    you: { hint: "default_mic", stt: "web_speech" },
-    them: { hint: "mic_2", stt: "whisper_cpp" },
-    requiresDownload: "whisper_cpp",
+    you: { hint: "default_mic", stt: "qwen_asr" },
+    them: { hint: "default_output", stt: "qwen_asr" },
+    requiresKey: "qwen",
   },
 ];
 

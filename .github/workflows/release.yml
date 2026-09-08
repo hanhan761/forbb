@@ -1,4 +1,4 @@
-name: 纯 API 中文版发布
+name: Qwen 纯 API 中文版发布
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "纯 API 中文版发布标签，例如 v2.20.12"
+        description: "纯 API Qwen 中文版发布标签，例如 v2.20.13"
         required: true
         type: string
 
@@ -57,7 +57,7 @@ jobs:
           # 纯 API 版本采用手动下载安装包，不生成自动更新元数据。
           args: --no-sign
           tagName: ${{ env.RELEASE_TAG }}
-          releaseName: "NexQ 纯 API 中文版 ${{ env.RELEASE_TAG }}"
-          releaseBody: "NexQ 纯 API 中文版：简体中文界面、托盘和 Windows 安装器；语音识别、翻译和 LLM 使用云端 API，音频与会议历史保留在本地。请下载 x64-setup.exe 安装。"
+          releaseName: "NexQ Qwen 纯 API 中文版 ${{ env.RELEASE_TAG }}"
+          releaseBody: "NexQ Qwen 纯 API 中文版：简体中文界面、托盘和 Windows 安装器；文本、翻译使用 Qwen LLM，语音识别使用 Qwen3-ASR-Flash，音频与会议历史保留在本地。请下载 x64-setup.exe 安装。"
           releaseDraft: false
           prerelease: false

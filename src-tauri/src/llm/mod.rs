@@ -308,15 +308,7 @@ impl LLMRouter {
     /// Get information about all available providers.
     pub fn get_all_providers() -> Vec<ProviderInfo> {
         #[cfg_attr(not(feature = "local-ai"), allow(unused_mut))]
-        let mut all_types = vec![
-            ProviderType::Openai,
-            ProviderType::Qwen,
-            ProviderType::Anthropic,
-            ProviderType::Groq,
-            ProviderType::Gemini,
-            ProviderType::Openrouter,
-            ProviderType::Custom,
-        ];
+        let mut all_types = vec![ProviderType::Qwen];
 
         #[cfg(feature = "local-ai")]
         {

@@ -531,7 +531,7 @@ export function ContextStrategySettings() {
   return (
     <div className="space-y-6">
       {/* ── Strategy Selector ── */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <button
           onClick={() => handleStrategyChange("local_rag")}
           className={`relative flex flex-col items-start rounded-xl border p-4 text-left transition-all duration-150 ${
@@ -551,22 +551,6 @@ export function ContextStrategySettings() {
           </p>
         </button>
 
-        <button
-          onClick={() => handleStrategyChange("gemini_cache")}
-          className={`relative flex flex-col items-start rounded-xl border p-4 text-left transition-all duration-150 ${
-            contextStrategy === "gemini_cache"
-              ? "border-orange-400/60 bg-orange-400/5 ring-1 ring-orange-400/20"
-              : "border-border/50 hover:border-border hover:bg-accent/50"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Cloud className="h-4 w-4 text-orange-400" />
-            <span className="text-sm font-medium text-foreground">Gemini Context Cache</span>
-          </div>
-          <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-            Cache docs in Gemini once — skip local embedding entirely
-          </p>
-        </button>
       </div>
 
       {contextStrategy === "local_rag" && (
@@ -1051,7 +1035,6 @@ export function ContextStrategySettings() {
         </>
       )}
 
-      <GeminiCachePanel />
     </div>
   );
 }

@@ -388,6 +388,7 @@ export interface GroqConfig {
 // == STT PROVIDER TYPES ==
 
 export type STTProviderType =
+  | "qwen_asr"
   | "whisper_cpp"
   | "deepgram"
   | "whisper_api"

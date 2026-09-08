@@ -55,9 +55,8 @@ pub async fn start_capture(
     }
 
     // ---- System Audio STT (for remote party in calls) ----
-    // Mic transcription is handled by Web Speech API in the frontend.
-    // System audio (WASAPI loopback = other party in Zoom/Meet) needs a
-    // cloud STT provider (Deepgram/Whisper/Azure/Groq) configured in Settings.
+    // The normal per-party capture path uses Qwen ASR for both sides.
+    // This legacy system-audio path also uses the shared Qwen API key.
     // If no cloud provider is configured, system audio won't be transcribed.
     let system_stt: Option<Box<dyn STTProvider>> = {
         let stt_config = state.stt.as_ref().and_then(|stt_arc| {
@@ -69,6 +68,7 @@ pub async fn start_capture(
             }
             Some((
                 provider_type,
+                router.qwen_api_key.clone(),
                 router.deepgram_api_key.clone(),
                 router.deepgram_config.clone(),
                 router.whisper_api_key.clone(),
@@ -80,9 +80,17 @@ pub async fn start_capture(
         });
 
         match stt_config {
-            Some((pt, dk, dg_cfg, wk, ak, ar, gk, lang)) => {
+            Some((pt, qk, dk, dg_cfg, wk, ak, ar, gk, lang)) => {
                 use crate::stt::provider::STTProviderType;
                 let p: Box<dyn STTProvider> = match pt {
+                    STTProviderType::QwenAsr => {
+                        let mut p = match qk.as_deref() {
+                            Some(k) => crate::stt::qwen_asr::QwenAsrSTT::with_api_key(k),
+                            None => crate::stt::qwen_asr::QwenAsrSTT::new(),
+                        };
+                        p.set_language(&lang);
+                        Box::new(p)
+                    }
                     STTProviderType::Deepgram => {
                         let mut p = match dk.as_deref() {
                             Some(k) => crate::stt::deepgram::DeepgramSTT::with_api_key(k),
@@ -122,8 +130,8 @@ pub async fn start_capture(
             }
             None => {
                 log::info!(
-                    "No cloud STT configured — system audio (remote party) won't be transcribed. \
-                     Set up Deepgram/Whisper/Azure/Groq in Settings → STT."
+                    "No Qwen API key configured — system audio (remote party) won't be transcribed. \
+                     Set up the Qwen API key in Settings → Qwen API."
                 );
                 None
             }
@@ -1707,6 +1715,21 @@ async fn create_stt_provider_for_party(
             provider.set_language(&lang);
             provider.set_app_handle(app.clone());
             provider.set_party(party_role);
+            Ok(Some(Box::new(provider)))
+        }
+        STTProviderType::QwenAsr => {
+            let lang = get_stt_language(state);
+            let key = get_credential_key(state, "qwen");
+            log::info!(
+                "Qwen API key for '{}': {}",
+                party_role,
+                if key.is_some() { "present" } else { "MISSING" }
+            );
+            let mut provider = match key.as_deref() {
+                Some(key) => crate::stt::qwen_asr::QwenAsrSTT::with_api_key(key),
+                None => crate::stt::qwen_asr::QwenAsrSTT::new(),
+            };
+            provider.set_language(&lang);
             Ok(Some(Box::new(provider)))
         }
         STTProviderType::Deepgram => {

@@ -12,6 +12,7 @@ pub mod word_diff;
 // Sub-PRD 9: Additional providers
 pub mod azure_speech;
 pub mod groq_whisper;
+pub mod qwen_asr;
 pub mod whisper_api;
 // STT Engine Overhaul: New streaming providers
 #[cfg(feature = "local-ai")]
@@ -103,6 +104,8 @@ pub struct STTRouter {
     audio_tx: Option<mpsc::Sender<AudioChunk>>,
     /// Language setting
     pub(crate) language: String,
+    /// Shared Qwen API key used by Qwen ASR.
+    pub(crate) qwen_api_key: Option<String>,
     /// Deepgram API key (cached from credential store)
     pub(crate) deepgram_api_key: Option<String>,
     /// Deepgram feature/model configuration
@@ -131,6 +134,7 @@ impl STTRouter {
             is_processing: false,
             audio_tx: None,
             language: "en-US".to_string(),
+            qwen_api_key: None,
             deepgram_api_key: None,
             deepgram_config: deepgram::DeepgramConfig::default(),
             whisper_api_key: None,
@@ -171,6 +175,14 @@ impl STTRouter {
 
         // Create the new provider
         let provider: Box<dyn STTProvider> = match provider_type {
+            STTProviderType::QwenAsr => {
+                let mut p = qwen_asr::QwenAsrSTT::new();
+                if let Some(ref key) = self.qwen_api_key {
+                    p.set_api_key(key);
+                }
+                p.set_language(&self.language);
+                Box::new(p)
+            }
             STTProviderType::WebSpeech => {
                 // WebSpeech is frontend-only — no Rust provider to instantiate.
                 // Just record the type so the pipeline knows to skip Rust STT.
@@ -387,6 +399,17 @@ impl STTRouter {
     }
 
     /// Set the Deepgram API key.
+    pub fn set_qwen_api_key(&mut self, key: &str) {
+        self.qwen_api_key = Some(key.to_string());
+
+        if self.active_type == Some(STTProviderType::QwenAsr) {
+            let mut provider = qwen_asr::QwenAsrSTT::with_api_key(key);
+            provider.set_language(&self.language);
+            self.active_provider = Some(Box::new(provider));
+        }
+    }
+
+    /// Set the Deepgram API key.
     pub fn set_deepgram_api_key(&mut self, key: &str) {
         self.deepgram_api_key = Some(key.to_string());
 
@@ -491,6 +514,17 @@ impl STTRouter {
         provider_type: &STTProviderType,
     ) -> Result<bool, String> {
         match provider_type {
+            STTProviderType::QwenAsr => {
+                let key = self
+                    .qwen_api_key
+                    .as_deref()
+                    .ok_or("No Qwen API key configured")?;
+                let provider = qwen_asr::QwenAsrSTT::with_api_key(key);
+                provider
+                    .test_connection()
+                    .await
+                    .map_err(|e| format!("Connection test failed: {}", e))
+            }
             STTProviderType::WebSpeech => {
                 // WebSpeech is always available in Chromium-based WebView
                 #[cfg(not(feature = "local-ai"))]

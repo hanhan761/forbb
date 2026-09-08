@@ -23,6 +23,7 @@ const STT_SHORT_LABELS: Record<string, string> = {
   whisper_api: "Whisper",
   azure_speech: "Azure",
   groq_whisper: "GroqSTT",
+  qwen_asr: "Qwen ASR",
 };
 
 export function StatusBar() {
