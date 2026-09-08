@@ -1,3 +1,10 @@
+## [2.20.11] (2026-09-08)
+
+### Features
+
+* **localization:** ship a Simplified Chinese UI, tray menu, tooltips, overlay, dialogs, and Windows installer
+* **release:** publish a pure API build as `NexQ 纯 API 中文版`
+
 ## [2.20.8](https://github.com/VahidAlizadeh/NexQ/compare/v2.20.7...v2.20.8) (2026-03-27)
 
 

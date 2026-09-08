@@ -25,9 +25,9 @@ pub fn build_tooltip(
     match state {
         TrayState::Idle => {
             if let Some(text) = custom_text {
-                format!("NexQ — Idle · {}", text)
+                format!("NexQ — 空闲 · {}", text)
             } else {
-                "NexQ — Idle".to_string()
+                "NexQ — 空闲".to_string()
             }
         }
         TrayState::Recording => {
@@ -35,29 +35,29 @@ pub fn build_tooltip(
                 .map(|s| format_elapsed(s))
                 .unwrap_or_else(|| "00:00".to_string());
             if is_muted {
-                format!("NexQ — Recording (Mic Muted) · {} elapsed", elapsed)
+                format!("NexQ — 录音中（麦克风已静音）· 已用时 {}", elapsed)
             } else {
-                format!("NexQ — Recording · {} elapsed", elapsed)
+                format!("NexQ — 录音中 · 已用时 {}", elapsed)
             }
         }
         TrayState::Muted => {
             let elapsed = meeting_start
                 .map(|s| format_elapsed(s))
                 .unwrap_or_else(|| "00:00".to_string());
-            format!("NexQ — Recording (Mic Muted) · {} elapsed", elapsed)
+            format!("NexQ — 录音中（麦克风已静音）· 已用时 {}", elapsed)
         }
         TrayState::Stealth => {
             let elapsed = meeting_start
                 .map(|s| format_elapsed(s))
                 .unwrap_or_else(|| "00:00".to_string());
-            format!("NexQ — Stealth · {} elapsed", elapsed)
+            format!("NexQ — 隐身模式 · 已用时 {}", elapsed)
         }
-        TrayState::AiProcessing => "NexQ — AI Processing...".to_string(),
+        TrayState::AiProcessing => "NexQ — AI 处理中…".to_string(),
         TrayState::Indexing => {
             if let Some(text) = custom_text {
                 format!("NexQ — {}", text)
             } else {
-                "NexQ — Indexing files...".to_string()
+                "NexQ — 正在索引文件…".to_string()
             }
         }
     }

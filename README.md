@@ -63,10 +63,12 @@
 The pure API version is the prebuilt **Remote-only** installer. It does not require
 Node.js, Rust, the Tauri CLI, or local AI model downloads.
 
-**Current direct download:** [NexQ_2.20.10_x64-setup.exe](https://github.com/hanhan761/forbb/releases/download/remote-v2.20.10/NexQ_2.20.10_x64-setup.exe)
+**Current direct download:** [NexQ_2.20.11_x64-setup.exe](https://github.com/hanhan761/forbb/releases/download/remote-v2.20.11/NexQ_2.20.11_x64-setup.exe)
+
+该版本为简体中文版本：应用界面、设置、弹窗、托盘菜单、悬浮窗和 Windows 安装器均已汉化。
 
 1. Open the [Releases](https://github.com/hanhan761/forbb/releases) page.
-2. Open the latest release whose name starts with **NexQ Remote-only**.
+2. Open the latest release whose name starts with **NexQ 纯 API 中文版**.
 3. Download the `x64-setup.exe` asset and run it. The installer uses the current-user
    install mode and does not require administrator privileges.
 4. In NexQ Settings, configure the cloud STT, translation, and LLM API keys.
@@ -110,7 +112,7 @@ through NexQ's credential manager and are not hard-coded into the app.
 
 Remote-only installers are published by the
 [remote release workflow](.github/workflows/release-remote.yml) for tags matching
-`remote-v*`. To publish one, push a tag such as `remote-v2.20.10`, or run the
+`remote-v*`. To publish one, push a tag such as `remote-v2.20.11`, or run the
 workflow manually from GitHub Actions and provide the tag as an input. A release
 must be published before end users can download the installer.
 

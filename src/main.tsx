@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { ChineseLocale } from "./lib/chineseLocale";
 
 // Check if this window was opened as a detached DevLog view
 const params = new URLSearchParams(window.location.search);
@@ -20,7 +21,9 @@ if (view === "devlog") {
       }
       ReactDOM.createRoot(document.getElementById("root")!).render(
         <React.StrictMode>
-          <DevLogWindow />
+          <ChineseLocale>
+            <DevLogWindow />
+          </ChineseLocale>
         </React.StrictMode>
       );
     });
@@ -28,7 +31,9 @@ if (view === "devlog") {
 } else {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <App />
+      <ChineseLocale>
+        <App />
+      </ChineseLocale>
     </React.StrictMode>
   );
 }
