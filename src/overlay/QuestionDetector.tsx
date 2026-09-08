@@ -10,14 +10,26 @@ import type { DetectedQuestion } from "../lib/types";
 
 function looksLikeQuestion(text: string): boolean {
   const trimmed = text.trim();
-  if (trimmed.endsWith("?")) return true;
+  if (trimmed.endsWith("?") || trimmed.endsWith("？")) return true;
   const lower = trimmed.toLowerCase();
   const qWords = [
     "what ", "how ", "why ", "when ", "where ", "who ", "which ",
     "can you", "could you", "would you", "do you", "are you",
     "is there", "have you", "tell me", "explain",
   ];
-  return qWords.some((w) => lower.startsWith(w));
+  if (qWords.some((w) => lower.startsWith(w))) return true;
+
+  // Qwen ASR returns Chinese questions with or without punctuation.
+  const chineseSignals = [
+    "什么", "为什么", "怎么", "如何", "怎样", "哪里", "哪儿", "哪个", "哪些", "谁",
+    "多少", "是否", "能否", "可否", "请问", "请介绍", "介绍一下", "请解释", "解释一下",
+    "谈谈", "说说", "你怎么看", "你认为", "你会如何",
+  ];
+  return chineseSignals.some((signal) => lower.includes(signal)) || /吗$|呢$/.test(trimmed);
+}
+
+function questionKey(q: DetectedQuestion): string {
+  return `${q.source}:${q.text.replace(/[?？。！!\s]+$/g, "").replace(/\s+/g, " ").trim().toLowerCase()}`;
 }
 
 interface TrackedQuestion extends DetectedQuestion {
@@ -28,6 +40,9 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
   const [questions, setQuestions] = useState<TrackedQuestion[]>([]);
   const processedIdsRef = useRef<Set<string>>(new Set());
   const autoAssistedKeysRef = useRef<Set<string>>(new Set());
+  const autoAssistInFlightRef = useRef(false);
+  const [pendingAutoQuestions, setPendingAutoQuestions] = useState<DetectedQuestion[]>([]);
+  const [autoAnswerCompleted, setAutoAnswerCompleted] = useState(0);
   const segments = useTranscriptStore((s) => s.segments);
   const autoTrigger = useAIActionsStore((s) => s.configs.globalDefaults.autoTrigger);
   const isStreaming = useStreamStore((s) => s.isStreaming);
@@ -39,15 +54,56 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
     isStreamingRef.current = isStreaming;
   }, [autoTrigger, isStreaming]);
 
+  const answerQuestion = useCallback(async (question: DetectedQuestion, automatic: boolean) => {
+    if (automatic) {
+      if (!autoTriggerRef.current) return;
+      if (autoAssistInFlightRef.current || isStreamingRef.current) {
+        setPendingAutoQuestions((pending) => [...pending, question].slice(-3));
+        return;
+      }
+      autoAssistInFlightRef.current = true;
+    }
+
+    try {
+      // Automatic answers always use the local knowledge base first and stay
+      // short enough to read aloud. Qwen then supplies the final wording.
+      await generateAssist("AskQuestion", question.text, "search_files", "short");
+    } catch (err) {
+      setQuestions((prev) =>
+        prev.map((item) =>
+          questionKey(item) === questionKey(question) ? { ...item, assisted: false } : item,
+        ),
+      );
+      if (automatic) {
+        showToast(
+          err instanceof Error ? err.message : "自动回答失败，请检查 Qwen API 或知识库配置",
+          "error",
+        );
+      }
+    } finally {
+      if (automatic) {
+        autoAssistInFlightRef.current = false;
+        setAutoAnswerCompleted((count) => count + 1);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pendingAutoQuestions.length === 0 || isStreaming || autoAssistInFlightRef.current) return;
+    const [next, ...rest] = pendingAutoQuestions;
+    setPendingAutoQuestions(rest);
+    void answerQuestion(next, true);
+  }, [answerQuestion, autoAnswerCompleted, isStreaming, pendingAutoQuestions]);
+
   const addQuestion = useCallback((q: DetectedQuestion) => {
-    const key = `${q.timestamp_ms}:${q.source}:${q.text}`;
+    const key = questionKey(q);
     const shouldAutoAssist =
       autoTriggerRef.current &&
-      !isStreamingRef.current &&
       !autoAssistedKeysRef.current.has(key);
 
     if (shouldAutoAssist) {
       autoAssistedKeysRef.current.add(key);
+      void answerQuestion(q, true);
     }
 
     setQuestions((prev) => {
@@ -55,20 +111,7 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
       return [{ ...q, assisted: shouldAutoAssist }, ...prev].slice(0, 10);
     });
 
-    if (shouldAutoAssist) {
-      generateAssist("Assist", q.text, "auto").catch((err) => {
-        setQuestions((prev) =>
-          prev.map((item) =>
-            item.text === q.text ? { ...item, assisted: false } : item,
-          ),
-        );
-        showToast(
-          err instanceof Error ? err.message : "Automatic AI assistance failed",
-          "error",
-        );
-      });
-    }
-  }, []);
+  }, [answerQuestion]);
 
   useEffect(() => {
     const p = onQuestionDetected((event) => {
@@ -90,12 +133,13 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
   }, [segments, addQuestion]);
 
   const handleAssist = useCallback((index: number) => {
-    const questionText = questions[index]?.text;
+    const question = questions[index];
+    if (!question) return;
     setQuestions((prev) =>
       prev.map((q, i) => i === index ? { ...q, assisted: true } : q)
     );
-    generateAssist("Assist", questionText).catch(() => {});
-  }, [questions]);
+    void answerQuestion(question, false);
+  }, [answerQuestion, questions]);
 
   const handleDismiss = useCallback((index: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -106,7 +150,7 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
   const previousQuestions = questions.slice(1, 4);
 
   return (
-    <div className="flex flex-col gap-2.5" role="region" aria-label="Detected questions">
+    <div className="flex flex-col gap-2.5" role="region" aria-label="自动识别的问题">
       {/* Latest question — prominent card */}
       <div
         className={`group flex items-start gap-3 rounded-lg transition-all duration-200 ${
@@ -116,7 +160,7 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
         onKeyDown={(e) => { if (latest && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); handleAssist(0); } }}
         role={latest ? "button" : undefined}
         tabIndex={latest ? 0 : undefined}
-        aria-label={latest ? `Question: ${latest.text}. ${latest.assisted ? "Answered" : "Click to assist"}` : undefined}
+        aria-label={latest ? `问题：${latest.text}。${latest.assisted ? "已回答" : "点击获取回答"}` : undefined}
       >
         <div className="relative mt-0.5 shrink-0" aria-hidden="true">
           <HelpCircle className={`h-5 w-5 transition-colors ${latest ? "text-info" : "text-muted-foreground/50"}`} />
@@ -137,7 +181,7 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
             </p>
           ) : (
             <p className="text-xs text-muted-foreground/50">
-              Listening for questions from the other party
+              正在监听对方的问题
             </p>
           )}
         </div>
@@ -146,7 +190,7 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
           <div className="flex shrink-0 items-center gap-1">
             <button
               onClick={(e) => { e.stopPropagation(); handleAssist(0); }}
-              aria-label={latest.assisted ? "Already answered" : "Get AI assistance for this question"}
+              aria-label={latest.assisted ? "已回答" : "获取这个问题的回答"}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 cursor-pointer ${
                 latest.assisted
                   ? "bg-success/10 border border-success/20 text-success"
@@ -154,14 +198,14 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
               }`}
             >
               {latest.assisted ? (
-                <><Check className="h-3.5 w-3.5" aria-hidden="true" />Answered</>
+                <><Check className="h-3.5 w-3.5" aria-hidden="true" />已回答</>
               ) : (
-                <><Sparkles className="h-3.5 w-3.5" aria-hidden="true" />Assist</>
+                <><Sparkles className="h-3.5 w-3.5" aria-hidden="true" />回答</>
               )}
             </button>
             <button
               onClick={(e) => handleDismiss(0, e)}
-              aria-label="Dismiss question"
+              aria-label="忽略问题"
               className="rounded-lg p-1.5 text-muted-foreground/30 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
@@ -214,7 +258,7 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
                 )}
                 <button
                   onClick={(e) => handleDismiss(realIdx, e)}
-                  aria-label="Dismiss question"
+                  aria-label="忽略问题"
                   className="rounded p-0.5 text-muted-foreground/0 opacity-0 transition-all duration-150 hover:bg-destructive/10 hover:text-destructive group-hover/q:opacity-100 group-hover/q:text-muted-foreground/30 cursor-pointer"
                 >
                   <X className="h-3 w-3" />

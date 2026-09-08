@@ -20,10 +20,30 @@ pub struct QuestionDetector;
 
 /// Interrogative words that commonly start questions.
 const INTERROGATIVE_STARTERS: &[&str] = &[
-    "what", "why", "how", "when", "where", "who", "which",
-    "can", "could", "would", "should",
-    "do", "does", "is", "are", "will", "have", "has",
-    "tell",
+    "what", "why", "how", "when", "where", "who", "which", "can", "could", "would", "should", "do",
+    "does", "is", "are", "will", "have", "has", "tell",
+];
+
+/// Chinese question signals commonly produced by Qwen ASR.
+const CHINESE_QUESTION_SIGNALS: &[&str] = &[
+    "什么",
+    "为什么",
+    "怎么",
+    "如何",
+    "怎样",
+    "哪里",
+    "哪儿",
+    "哪个",
+    "哪些",
+    "谁",
+    "多少",
+    "几时",
+    "是否",
+    "能否",
+    "可否",
+    "请问",
+    "吗",
+    "呢",
 ];
 
 /// Interview-specific patterns that indicate a question or prompt.
@@ -48,6 +68,16 @@ const INTERVIEW_PATTERNS: &[&str] = &[
     "what approach would you",
     "what's your approach to",
     "what is your approach to",
+    "请介绍一下",
+    "介绍一下",
+    "请解释",
+    "解释一下",
+    "谈谈",
+    "说说",
+    "你会如何",
+    "你怎么看",
+    "你认为",
+    "你能否",
 ];
 
 impl QuestionDetector {
@@ -57,7 +87,12 @@ impl QuestionDetector {
 
     /// Detect questions in the given text.
     /// Returns a list of detected questions with confidence scores.
-    pub fn detect_questions(&self, text: &str, timestamp_ms: u64, source: &str) -> Vec<DetectedQuestion> {
+    pub fn detect_questions(
+        &self,
+        text: &str,
+        timestamp_ms: u64,
+        source: &str,
+    ) -> Vec<DetectedQuestion> {
         let mut questions: Vec<DetectedQuestion> = Vec::new();
 
         // Split text into sentences
@@ -71,8 +106,8 @@ impl QuestionDetector {
 
             let mut confidence: f64 = 0.0;
 
-            // Layer 1: Check for question mark
-            if trimmed.ends_with('?') {
+            // Layer 1: Check for both ASCII and Chinese question marks.
+            if trimmed.ends_with('?') || trimmed.ends_with('？') {
                 confidence = 0.95;
             }
 
@@ -83,6 +118,15 @@ impl QuestionDetector {
                 if INTERROGATIVE_STARTERS.contains(&first_word) {
                     // Interrogative word at start without question mark
                     confidence = confidence.max(0.6);
+                }
+
+                if CHINESE_QUESTION_SIGNALS
+                    .iter()
+                    .any(|signal| lower.contains(signal))
+                    || lower.ends_with('吗')
+                    || lower.ends_with('呢')
+                {
+                    confidence = confidence.max(0.75);
                 }
             }
 
@@ -118,7 +162,7 @@ fn split_sentences(text: &str) -> Vec<String> {
 
     for ch in text.chars() {
         current.push(ch);
-        if ch == '.' || ch == '?' || ch == '!' {
+        if matches!(ch, '.' | '?' | '!' | '。' | '？' | '！') {
             let trimmed = current.trim().to_string();
             if !trimmed.is_empty() {
                 sentences.push(trimmed);
@@ -134,4 +178,38 @@ fn split_sentences(text: &str) -> Vec<String> {
     }
 
     sentences
+}
+
+#[cfg(test)]
+mod tests {
+    use super::QuestionDetector;
+
+    #[test]
+    fn detects_simplified_chinese_question_with_full_width_punctuation() {
+        let questions =
+            QuestionDetector::new().detect_questions("这个方案为什么更适合当前项目？", 100, "Them");
+
+        assert_eq!(questions.len(), 1);
+        assert_eq!(questions[0].text, "这个方案为什么更适合当前项目？");
+    }
+
+    #[test]
+    fn detects_simplified_chinese_question_without_punctuation() {
+        let questions =
+            QuestionDetector::new().detect_questions("你会如何验证这个方案", 100, "Them");
+
+        assert_eq!(questions.len(), 1);
+        assert_eq!(questions[0].text, "你会如何验证这个方案");
+    }
+
+    #[test]
+    fn detects_chinese_interrogative_in_a_natural_sentence() {
+        let questions = QuestionDetector::new().detect_questions(
+            "这个方案为什么更适合当前项目",
+            100,
+            "Them",
+        );
+
+        assert_eq!(questions.len(), 1);
+    }
 }

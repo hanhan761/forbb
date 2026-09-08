@@ -209,10 +209,9 @@ impl AudioCaptureManager {
                 }
                 Err(e) => {
                     self.capture_error.store(true, Ordering::SeqCst);
-                    log::error!(
-                        "Failed to start system input capture: {}. System audio will not be captured.",
-                        e
-                    );
+                    self.mic_stream.take();
+                    log::error!("Failed to start system input capture: {}", e);
+                    return Err(format!("System audio input capture failed: {}", e));
                 }
             }
         } else {
@@ -236,10 +235,9 @@ impl AudioCaptureManager {
                 }
                 Err(e) => {
                     self.capture_error.store(true, Ordering::SeqCst);
-                    log::error!(
-                        "WASAPI loopback failed: {}. System audio (remote party) will not be captured.",
-                        e
-                    );
+                    self.mic_stream.take();
+                    log::error!("WASAPI loopback failed: {}", e);
+                    return Err(format!("System audio loopback failed: {}", e));
                 }
             }
         }
@@ -433,10 +431,7 @@ impl AudioCaptureManager {
         }
 
         let detected = self.test_audio_detected.load(Ordering::SeqCst);
-        log::info!(
-            "Audio test stopped, audio detected: {}",
-            detected
-        );
+        log::info!("Audio test stopped, audio detected: {}", detected);
         detected
     }
 
@@ -636,17 +631,15 @@ pub async fn process_recording(
     let db_result = {
         let db_guard = db.lock();
         match db_guard {
-            Ok(guard) => {
-                crate::db::meetings::update_meeting_recording(
-                    guard.connection(),
-                    &meeting_id_clone,
-                    &recording_path_str,
-                    recording_size,
-                    &waveform_path_str,
-                    recording_offset_ms,
-                )
-                .map_err(|e| e.to_string())
-            }
+            Ok(guard) => crate::db::meetings::update_meeting_recording(
+                guard.connection(),
+                &meeting_id_clone,
+                &recording_path_str,
+                recording_size,
+                &waveform_path_str,
+                recording_offset_ms,
+            )
+            .map_err(|e| e.to_string()),
             Err(e) => Err(format!("DB lock poisoned: {}", e)),
         }
     };
