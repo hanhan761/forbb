@@ -32,6 +32,7 @@ function App() {
   const firstRunCompleted = useConfigStore((s) => s.firstRunCompleted);
   const configLoaded = useConfigStore((s) => s._loaded);
   const loadConfig = useConfigStore((s) => s.loadConfig);
+  const overlayOpacity = useConfigStore((s) => s.overlayOpacity);
 
   // Wire up theme and global shortcuts
   useTheme();
@@ -274,7 +275,10 @@ function App() {
   // Overlay Tauri window: always transparent, uses currentView directly (ignores firstRunCompleted)
   if (isOverlayWindow) {
     return (
-      <div className="h-screen w-screen overflow-hidden bg-transparent text-foreground">
+      <div
+        className="h-screen w-screen overflow-hidden text-foreground"
+        style={{ background: `hsl(var(--background) / ${overlayOpacity})` }}
+      >
         <ErrorBoundary fallbackMessage="NexQ encountered an error">
           {currentView === "overlay" && (
             <ErrorBoundary fallbackMessage="Failed to load overlay">
@@ -297,7 +301,10 @@ function App() {
   }
 
   return (
-    <div className={`h-screen w-screen overflow-hidden text-foreground ${resolvedView === "overlay" ? "bg-transparent" : "bg-background"}`}>
+    <div
+      className={`h-screen w-screen overflow-hidden text-foreground ${resolvedView === "overlay" ? "bg-transparent" : "bg-background"}`}
+      style={resolvedView === "overlay" ? { background: `hsl(var(--background) / ${overlayOpacity})` } : undefined}
+    >
       <ErrorBoundary fallbackMessage="NexQ encountered an error">
         {resolvedView === "launcher" && (
           <ErrorBoundary fallbackMessage="Failed to load launcher">

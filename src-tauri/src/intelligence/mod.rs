@@ -275,3 +275,37 @@ impl IntelligenceEngine {
         log::info!("[intelligence] session cleared for new meeting");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::IntelligenceEngine;
+
+    #[test]
+    fn final_remote_question_is_returned_for_answer_dispatch() {
+        let mut engine = IntelligenceEngine::new();
+        let questions = engine.push_transcript(
+            "这个项目为什么选择 Qwen？".to_string(),
+            "Them".to_string(),
+            1234,
+            true,
+        );
+
+        assert_eq!(questions.len(), 1);
+        assert_eq!(questions[0].source, "Them");
+        assert_eq!(engine.last_detected_question().unwrap().text, questions[0].text);
+    }
+
+    #[test]
+    fn interim_remote_transcript_does_not_dispatch_an_answer() {
+        let mut engine = IntelligenceEngine::new();
+        let questions = engine.push_transcript(
+            "为什么选择 Qwen".to_string(),
+            "Them".to_string(),
+            1234,
+            false,
+        );
+
+        assert!(questions.is_empty());
+        assert!(engine.last_detected_question().is_none());
+    }
+}

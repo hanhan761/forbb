@@ -109,9 +109,23 @@ fn count_total_segments(segments_json: &str) -> usize {
         .unwrap_or(0)
 }
 
-/// Build the fixed language directive for generated AI assistance.
-fn get_response_language_instruction() -> &'static str {
-    "Respond only in Simplified Chinese. Do not adapt the response language to the interviewer's language or the transcript. Keep the wording natural and concise; when the mode asks for a speakable answer, make it easy to read aloud."
+/// Build the language directive for generated AI assistance.
+///
+/// The frontend persists one of `zh`, `en`, or `bilingual`. Unknown and
+/// missing values deliberately fall back to the product's original Chinese
+/// behavior so old clients and old config files remain compatible.
+fn get_response_language_instruction(answer_language: Option<&str>) -> &'static str {
+    match answer_language.map(str::trim) {
+        Some("en") => {
+            "Respond only in English. Do not adapt the response language to the interviewer's language or the transcript. Keep the wording natural and concise; when the mode asks for a speakable answer, make it easy to read aloud."
+        }
+        Some("bilingual") => {
+            "Respond in exactly two clearly separated sections: first Simplified Chinese under the heading `中文`, then English under the heading `English`. Do not mix Chinese and English within a section, do not repeat either section, and do not adapt this order to the interviewer's language or the transcript. Keep both sections natural and concise; when the mode asks for a speakable answer, make each version easy to read aloud."
+        }
+        _ => {
+            "Respond only in Simplified Chinese. Do not adapt the response language to the interviewer's language or the transcript. Keep the wording natural and concise; when the mode asks for a speakable answer, make it easy to read aloud."
+        }
+    }
 }
 
 #[cfg(test)]
@@ -119,17 +133,28 @@ mod response_language_tests {
     use super::get_response_language_instruction;
 
     #[test]
-    fn always_uses_simplified_chinese() {
-        let instruction = get_response_language_instruction();
+    fn defaults_to_simplified_chinese() {
+        let instruction = get_response_language_instruction(None);
         assert!(instruction.contains("Respond only in Simplified Chinese"));
         assert!(instruction.contains("Do not adapt the response language"));
     }
 
     #[test]
-    fn never_falls_back_to_english_or_auto_adaptation() {
-        let instruction = get_response_language_instruction();
-        assert!(!instruction.contains("Respond in English"));
-        assert!(!instruction.contains("same language as"));
+    fn supports_english_and_bilingual_output() {
+        let english = get_response_language_instruction(Some("en"));
+        assert!(english.contains("Respond only in English"));
+
+        let bilingual = get_response_language_instruction(Some("bilingual"));
+        assert!(bilingual.contains("first Simplified Chinese"));
+        assert!(bilingual.contains("then English"));
+        assert!(bilingual.contains("`中文`"));
+        assert!(bilingual.contains("`English`"));
+    }
+
+    #[test]
+    fn unknown_language_values_fall_back_to_chinese() {
+        let instruction = get_response_language_instruction(Some("fr"));
+        assert!(instruction.contains("Respond only in Simplified Chinese"));
     }
 }
 
@@ -139,6 +164,7 @@ pub async fn generate_assist(
     custom_question: Option<String>,
     route: Option<String>,
     answer_length: Option<String>,
+    answer_language: Option<String>,
     reasoning_effort: Option<String>,
     glossary: Option<Vec<String>>,
     transcript_segments: Option<String>,
@@ -359,7 +385,7 @@ pub async fn generate_assist(
             "detailed" => "Detailed (1–2 minutes)",
             _ => "Normal (30–60 seconds)",
         },
-        get_response_language_instruction(),
+        get_response_language_instruction(answer_language.as_deref()),
         glossary_instruction,
         if mode == "MeetingSummary" {
             "\n\nReview persistence requirement: include a ## Mistake Bank section. Classify each weak point as Technical, Research, or English and include the question, weak point, correction, and next drill; if none, write None found."

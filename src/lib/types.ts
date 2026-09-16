@@ -218,6 +218,9 @@ export interface AIInteraction {
   sources?: StreamSource[];
 }
 
+/** Language used for generated AI answers (separate from live translation). */
+export type AnswerLanguage = "zh" | "en" | "bilingual";
+
 export type IntelligenceMode =
   | "Assist"
   | "WhatToSay"
@@ -484,6 +487,8 @@ export interface ContextResource {
   token_count: number;
   preview: string;
   loaded_at: string;
+  /** Original folder selected for import; app-managed copies remain in context storage. */
+  source_folder?: string;
   chunk_count?: number;
   index_status?: string;
   last_indexed_at?: string;
@@ -493,6 +498,12 @@ export type CodexReasoningLevel = "low" | "medium" | "high" | "xhigh";
 
 export interface ObsidianVaultImportResult {
   vault_path: string;
+  imported: ContextResource[];
+  skipped: Array<{ path: string; reason: string }>;
+}
+
+export interface ContextFolderImportResult {
+  folder_path: string;
   imported: ContextResource[];
   skipped: Array<{ path: string; reason: string }>;
 }

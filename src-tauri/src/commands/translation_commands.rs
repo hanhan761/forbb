@@ -7,6 +7,20 @@ use crate::translation::{
 };
 use tauri::Manager;
 
+fn validate_segment_pairs(segment_ids: &[String], texts: &[String]) -> Result<(), String> {
+    if segment_ids.len() != texts.len() {
+        return Err(format!(
+            "segment_ids and texts must have the same length ({} != {})",
+            segment_ids.len(),
+            texts.len()
+        ));
+    }
+    if segment_ids.iter().any(|id| id.trim().is_empty()) {
+        return Err("segment_ids cannot contain an empty value".to_string());
+    }
+    Ok(())
+}
+
 #[command]
 pub async fn set_translation_provider(
     app: AppHandle,
@@ -186,8 +200,12 @@ pub async fn translate_segments(
     source_lang: Option<String>,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let target = target_lang.ok_or("target_lang is required")?;
+    let target = target_lang
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("target_lang is required")?;
     let source = source_lang.as_deref();
+
+    validate_segment_pairs(&segment_ids, &texts)?;
 
     let trans_arc = state.translation.as_ref()
         .ok_or("Translation router not initialized")?;
@@ -616,4 +634,32 @@ pub async fn export_translated_transcript(
     }
 
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_segment_pairs;
+
+    #[test]
+    fn rejects_translation_batches_with_mismatched_vectors() {
+        let ids = vec!["segment-1".to_string()];
+        let texts = Vec::new();
+        let error = validate_segment_pairs(&ids, &texts).expect_err("vectors must match");
+        assert!(error.contains("same length"));
+    }
+
+    #[test]
+    fn rejects_empty_segment_ids() {
+        let ids = vec![" ".to_string()];
+        let texts = vec!["hello".to_string()];
+        let error = validate_segment_pairs(&ids, &texts).expect_err("id must not be empty");
+        assert!(error.contains("empty"));
+    }
+
+    #[test]
+    fn accepts_ordered_translation_pairs() {
+        let ids = vec!["segment-1".to_string(), "segment-2".to_string()];
+        let texts = vec!["first".to_string(), "second".to_string()];
+        assert!(validate_segment_pairs(&ids, &texts).is_ok());
+    }
 }

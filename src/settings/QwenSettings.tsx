@@ -25,6 +25,8 @@ export function QwenSettings() {
   const setMeetingAudioConfig = useConfigStore((state) => state.setMeetingAudioConfig);
   const sttLanguage = useConfigStore((state) => state.sttLanguage);
   const setSTTLanguage = useConfigStore((state) => state.setSTTLanguage);
+  const answerLanguage = useConfigStore((state) => state.answerLanguage);
+  const setAnswerLanguage = useConfigStore((state) => state.setAnswerLanguage);
 
   const targetLang = useTranslationStore((state) => state.targetLang);
   const sourceLang = useTranslationStore((state) => state.sourceLang);
@@ -209,6 +211,27 @@ export function QwenSettings() {
             <option value="ja-JP">日本語</option>
             <option value="ko-KR">한국어</option>
             <option value="auto">自动识别</option>
+          </select>
+        </label>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-border/30 bg-card/40 p-5">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">回答输出语言</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            控制 Qwen 回答的输出语言；选择中英双语时始终先中文、后 English。
+          </p>
+        </div>
+        <label className="block space-y-2 text-sm text-foreground">
+          <span>回答语言</span>
+          <select
+            value={answerLanguage}
+            onChange={(event) => setAnswerLanguage(event.target.value as "zh" | "en" | "bilingual")}
+            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          >
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+            <option value="bilingual">中英双语（中文在前）</option>
           </select>
         </label>
       </section>

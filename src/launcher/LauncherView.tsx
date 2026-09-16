@@ -10,7 +10,7 @@ import { MeetingDetails } from "./meeting-details";
 import { MeetingSetupModal } from "./MeetingSetupModal";
 import { MockInterviewPanel } from "./MockInterviewPanel";
 import { FileUpload } from "../context/FileUpload";
-import { ResourceCard } from "../context/ResourceCard";
+import { ContextResourceList } from "../context/ContextResourceList";
 import { TokenBudget } from "../context/TokenBudget";
 import { TestSearchDialog } from "../context/TestSearchDialog";
 import { NEXQ_VERSION, NEXQ_DEVELOPER } from "../lib/version";
@@ -73,7 +73,6 @@ export function LauncherView() {
   const activeMeeting = useMeetingStore((s) => s.activeMeeting);
 
   const resources = useContextStore((s) => s.resources);
-  const removeFile = useContextStore((s) => s.removeFile);
   const loadResources = useContextStore((s) => s.loadResources);
   const refreshTokenBudget = useContextStore((s) => s.refreshTokenBudget);
 
@@ -107,7 +106,6 @@ export function LauncherView() {
   const isAutoIndexing = useRagStore((s) => s.isAutoIndexing);
   const refreshIndexStatus = useRagStore((s) => s.refreshIndexStatus);
   const rebuildIndex = useRagStore((s) => s.rebuildIndex);
-  const autoRemoveFileIndex = useRagStore((s) => s.autoRemoveFileIndex);
 
   const { favorites, toggleFavorite } = useFavorites();
   const autoStartTriggered = useRef(false);
@@ -508,28 +506,8 @@ export function LauncherView() {
             {/* Token budget */}
             <TokenBudget />
 
-            {/* Sources */}
-            {resources.length > 0 && (
-              <div>
-                <div className="mb-2 text-meta font-semibold uppercase tracking-wider text-muted-foreground/60">
-                  Sources ({resources.length})
-                </div>
-                <div className="space-y-2">
-                  {resources.map((r) => (
-                    <ResourceCard
-                      key={r.id}
-                      resource={r}
-                      onRemove={(id) => {
-                        removeFile(id);
-                        if (contextStrategy === "local_rag") {
-                          autoRemoveFileIndex(id);
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Sources and batch/folder management */}
+            <ContextResourceList />
 
           </div>
         </div>

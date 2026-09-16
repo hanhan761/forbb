@@ -1,13 +1,18 @@
 import { create } from "zustand";
 import type {
   ContextResource,
+  ContextFolderImportResult,
   ObsidianVaultImportResult,
   TokenBudget,
 } from "../lib/types";
 import {
   importObsidianVault as ipcImportObsidianVault,
+  importContextFolder as ipcImportContextFolder,
   loadContextFile as ipcLoadContextFile,
   removeContextFile as ipcRemoveContextFile,
+  removeContextFiles as ipcRemoveContextFiles,
+  removeContextFolder as ipcRemoveContextFolder,
+  clearContextResources as ipcClearContextResources,
   listContextResources as ipcListContextResources,
   setCustomInstructions as ipcSetCustomInstructions,
   getTokenBudget as ipcGetTokenBudget,
@@ -33,7 +38,11 @@ interface ContextState {
   loadResources: () => Promise<void>;
   loadFile: (filePath: string) => Promise<ContextResource>;
   importVault: (vaultPath: string) => Promise<ObsidianVaultImportResult>;
+  importFolder: (folderPath: string) => Promise<ContextFolderImportResult>;
   removeFile: (resourceId: string) => Promise<void>;
+  removeFiles: (resourceIds: string[]) => Promise<number>;
+  removeFolder: (sourceFolder: string) => Promise<number>;
+  clearResources: () => Promise<number>;
   saveCustomInstructions: (instructions: string) => Promise<void>;
   refreshTokenBudget: () => Promise<void>;
 }
@@ -108,6 +117,23 @@ export const useContextStore = create<ContextState>((set, get) => ({
     }
   },
 
+  importFolder: async (folderPath: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      const result = await ipcImportContextFolder(folderPath);
+      set((state) => ({
+        resources: [...state.resources, ...result.imported],
+        isLoading: false,
+      }));
+      await get().refreshTokenBudget();
+      return result;
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      set({ isLoading: false, error: errorMsg });
+      throw new Error(errorMsg);
+    }
+  },
+
   removeFile: async (resourceId: string) => {
     try {
       set({ error: null });
@@ -117,6 +143,51 @@ export const useContextStore = create<ContextState>((set, get) => ({
       }));
       // Refresh token budget after removing a file
       await get().refreshTokenBudget();
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+      throw e;
+    }
+  },
+
+  removeFiles: async (resourceIds: string[]) => {
+    try {
+      set({ error: null });
+      const removed = await ipcRemoveContextFiles(resourceIds);
+      set((state) => ({
+        resources: state.resources.filter((resource) => !resourceIds.includes(resource.id)),
+      }));
+      await get().refreshTokenBudget();
+      return removed;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+      throw e;
+    }
+  },
+
+  removeFolder: async (sourceFolder: string) => {
+    try {
+      set({ error: null });
+      const removed = await ipcRemoveContextFolder(sourceFolder);
+      set((state) => ({
+        resources: state.resources.filter(
+          (resource) => resource.source_folder !== sourceFolder,
+        ),
+      }));
+      await get().refreshTokenBudget();
+      return removed;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+      throw e;
+    }
+  },
+
+  clearResources: async () => {
+    try {
+      set({ error: null });
+      const removed = await ipcClearContextResources();
+      set({ resources: [] });
+      await get().refreshTokenBudget();
+      return removed;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
       throw e;

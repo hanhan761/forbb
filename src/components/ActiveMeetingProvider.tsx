@@ -17,9 +17,15 @@ import { useTranslation } from "../hooks/useTranslation";
 import { useCallLogCapture } from "../hooks/useCallLogCapture";
 import { useSTTStatus } from "../hooks/useSTTStatus";
 import { useDevLog } from "../hooks/useDevLog";
+import { useAutoQuestionAnswer } from "../hooks/useAutoQuestionAnswer";
 
 export function ActiveMeetingProvider({ isLauncherWindow = true }: { isLauncherWindow?: boolean }) {
   const activeMeeting = useMeetingStore((s) => s.activeMeeting);
+
+  // Install the launcher listener even before a meeting is active. Audio
+  // capture can start before the overlay window mounts, so automatic Qwen
+  // answers must not depend on the overlay component lifecycle.
+  useAutoQuestionAnswer({ enabled: isLauncherWindow });
 
   if (!activeMeeting) return null;
 

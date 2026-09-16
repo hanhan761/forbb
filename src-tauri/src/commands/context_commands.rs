@@ -92,6 +92,115 @@ fn collect_markdown_files_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> Res
     Ok(())
 }
 
+fn is_supported_context_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "pdf" | "txt" | "md" | "docx"
+            )
+        })
+}
+
+fn collect_context_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    collect_context_files_recursive(root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_context_files_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read context folder '{}': {}", dir.display(), e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to inspect context folder entry: {}", e))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("Failed to inspect '{}': {}", path.display(), e))?;
+
+        if file_type.is_dir() {
+            if !entry.file_name().to_string_lossy().starts_with('.') {
+                collect_context_files_recursive(&path, files)?;
+            }
+        } else if file_type.is_file() && is_supported_context_file(&path) {
+            files.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+fn persist_context_resource(
+    state: &AppState,
+    resource: &ContextResource,
+) -> Result<(), String> {
+    let Some(db_arc) = state.database.as_ref() else {
+        return Ok(());
+    };
+    let db_guard = db_arc
+        .lock()
+        .map_err(|e| format!("Failed to lock database: {}", e))?;
+    let db_resource = crate::db::context::ContextResource {
+        id: resource.id.clone(),
+        name: resource.name.clone(),
+        file_type: resource.file_type.clone(),
+        file_path: resource.file_path.clone(),
+        size_bytes: resource.size_bytes as i64,
+        token_count: resource.token_count as i64,
+        preview: resource.preview.clone(),
+        loaded_at: resource.loaded_at.clone(),
+        source_folder: resource.source_folder.clone(),
+    };
+    crate::db::context::add_context_resource(db_guard.connection(), &db_resource)
+        .map_err(|e| format!("Failed to persist context resource: {}", e))
+}
+
+fn persist_context_resources(
+    state: &AppState,
+    resources: &[ContextResource],
+) -> Result<(), String> {
+    for resource in resources {
+        persist_context_resource(state, resource)?;
+    }
+    Ok(())
+}
+
+fn delete_context_resources_from_database(
+    state: &AppState,
+    resource_ids: &[String],
+    operation: &str,
+) -> Result<(), String> {
+    if let Some(db_arc) = state.database.as_ref() {
+        let db_guard = db_arc
+            .lock()
+            .map_err(|e| format!("Failed to lock database: {}", e))?;
+        crate::db::context::delete_context_resources(db_guard.connection(), resource_ids)
+            .map_err(|e| format!("Failed to {} context resources in database: {}", operation, e))?;
+    }
+    Ok(())
+}
+
+fn clear_context_database(state: &AppState) -> Result<(), String> {
+    if let Some(db_arc) = state.database.as_ref() {
+        let db_guard = db_arc
+            .lock()
+            .map_err(|e| format!("Failed to lock database: {}", e))?;
+        crate::db::context::clear_context_resources(db_guard.connection())
+            .map_err(|e| format!("Failed to clear knowledge base database: {}", e))?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ContextFolderImportResult {
+    folder_path: String,
+    imported: Vec<ContextResource>,
+    skipped: Vec<ObsidianSkippedFile>,
+}
+
 #[command]
 pub async fn import_obsidian_vault(
     vault_path: String,
@@ -121,7 +230,7 @@ pub async fn import_obsidian_vault(
 
         for path in files {
             let path_string = path.to_string_lossy().into_owned();
-            match ctx.load_file(&path_string) {
+            match ctx.load_file_with_source_folder(&path_string, Some(&vault_path)) {
                 Ok(resource) => imported.push(resource),
                 Err(reason) => skipped.push(ObsidianSkippedFile {
                     path: path_string,
@@ -133,31 +242,7 @@ pub async fn import_obsidian_vault(
 
     // Persist the imported copies using the same database shape as single-file
     // imports, so they survive restart and remain searchable by the existing RAG.
-    if let Some(db_arc) = state.database.as_ref() {
-        if let Ok(db_guard) = db_arc.lock() {
-            for resource in &imported {
-                let db_resource = crate::db::context::ContextResource {
-                    id: resource.id.clone(),
-                    name: resource.name.clone(),
-                    file_type: resource.file_type.clone(),
-                    file_path: resource.file_path.clone(),
-                    size_bytes: resource.size_bytes as i64,
-                    token_count: resource.token_count as i64,
-                    preview: resource.preview.clone(),
-                    loaded_at: resource.loaded_at.clone(),
-                };
-                if let Err(e) =
-                    crate::db::context::add_context_resource(db_guard.connection(), &db_resource)
-                {
-                    log::warn!(
-                        "Failed to persist imported Obsidian note '{}': {}",
-                        resource.name,
-                        e
-                    );
-                }
-            }
-        }
-    }
+    persist_context_resources(&state, &imported)?;
 
     log::info!(
         "Imported {} Markdown note(s) from Obsidian Vault '{}' ({} skipped)",
@@ -172,6 +257,55 @@ pub async fn import_obsidian_vault(
         skipped,
     })
     .map_err(|e| format!("Failed to serialize Obsidian import result: {}", e))
+}
+
+/// Import every supported context file under a selected folder. The folder is
+/// stored as group metadata so it can later be replaced or deleted in one
+/// operation; only the app-managed copies are removed by those operations.
+#[command]
+pub async fn import_context_folder(
+    folder_path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let folder = PathBuf::from(&folder_path);
+    if !folder.is_dir() {
+        return Err(format!("Knowledge base folder not found: {}", folder_path));
+    }
+
+    let files = collect_context_files(&folder)?;
+    if files.is_empty() {
+        return Err("No supported files found in the selected knowledge-base folder".to_string());
+    }
+
+    let ctx_mgr = state
+        .context
+        .as_ref()
+        .ok_or_else(|| "Context manager not initialized".to_string())?;
+    let mut imported = Vec::new();
+    let mut skipped = Vec::new();
+    {
+        let mut ctx = ctx_mgr
+            .lock()
+            .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+        for path in files {
+            let path_string = path.to_string_lossy().into_owned();
+            match ctx.load_file_with_source_folder(&path_string, Some(&folder_path)) {
+                Ok(resource) => imported.push(resource),
+                Err(reason) => skipped.push(ObsidianSkippedFile {
+                    path: path_string,
+                    reason,
+                }),
+            }
+        }
+    }
+
+    persist_context_resources(&state, &imported)?;
+    serde_json::to_string(&ContextFolderImportResult {
+        folder_path,
+        imported,
+        skipped,
+    })
+    .map_err(|e| format!("Failed to serialize folder import result: {}", e))
 }
 
 /// Write a completed interview review into a user-selected Obsidian folder.
@@ -279,24 +413,8 @@ pub async fn load_context_file(
         ctx.load_file(&file_path)?
     };
 
-    // Persist to DB so the resource survives app restarts
-    if let Some(db_arc) = state.database.as_ref() {
-        if let Ok(db_guard) = db_arc.lock() {
-            let db_res = crate::db::context::ContextResource {
-                id: resource.id.clone(),
-                name: resource.name.clone(),
-                file_type: resource.file_type.clone(),
-                file_path: resource.file_path.clone(),
-                size_bytes: resource.size_bytes as i64,
-                token_count: resource.token_count as i64,
-                preview: resource.preview.clone(),
-                loaded_at: resource.loaded_at.clone(),
-            };
-            if let Err(e) = crate::db::context::add_context_resource(db_guard.connection(), &db_res) {
-                log::warn!("Failed to persist context resource to DB: {}", e);
-            }
-        }
-    }
+    // Persist to DB so the resource survives app restarts.
+    persist_context_resource(&state, &resource)?;
 
     serde_json::to_string(&resource)
         .map_err(|e| format!("Failed to serialize resource: {}", e))
@@ -312,22 +430,133 @@ pub async fn remove_context_file(
         .as_ref()
         .ok_or_else(|| "Context manager not initialized".to_string())?;
 
+    // Validate before touching the database. The database deletion happens
+    // first so a database failure cannot leave an in-memory resource invisible
+    // from the persisted knowledge base.
     {
-        let mut ctx = ctx_mgr
+        let ctx = ctx_mgr
             .lock()
             .map_err(|e| format!("Failed to lock context manager: {}", e))?;
-        ctx.remove_file(&resource_id)?;
-    }
-
-    // Remove from DB (context record + RAG chunks)
-    if let Some(db_arc) = state.database.as_ref() {
-        if let Ok(db_guard) = db_arc.lock() {
-            let _ = crate::db::context::delete_context_resource(db_guard.connection(), &resource_id);
-            let _ = crate::db::rag::delete_chunks_by_file(db_guard.connection(), &resource_id);
+        if !ctx
+            .list_resources()
+            .iter()
+            .any(|resource| resource.id == resource_id)
+        {
+            return Err(format!("Resource not found: {}", resource_id));
         }
     }
 
+    let ids = vec![resource_id.clone()];
+    delete_context_resources_from_database(&state, &ids, "remove")?;
+
+    let mut ctx = ctx_mgr
+        .lock()
+        .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+    ctx.remove_file(&resource_id)?;
+    ctx.cleanup_empty_storage_dir();
+
     Ok(())
+}
+
+#[command]
+pub async fn remove_context_files(
+    resource_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    if resource_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let ctx_mgr = state
+        .context
+        .as_ref()
+        .ok_or_else(|| "Context manager not initialized".to_string())?;
+
+    let mut resource_ids = resource_ids;
+    resource_ids.sort();
+    resource_ids.dedup();
+
+    // Validate every ID before touching the database. The database deletion
+    // happens before removing in-memory resources to avoid split state when
+    // the database is locked or otherwise fails.
+    {
+        let ctx = ctx_mgr
+            .lock()
+            .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+        let resources = ctx.list_resources();
+        for resource_id in &resource_ids {
+            if !resources.iter().any(|resource| resource.id == *resource_id) {
+                return Err(format!("Resource not found: {}", resource_id));
+            }
+        }
+    }
+
+    delete_context_resources_from_database(&state, &resource_ids, "remove")?;
+
+    let mut ctx = ctx_mgr
+        .lock()
+        .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+    let removed = ctx.remove_files(&resource_ids)?;
+    ctx.cleanup_empty_storage_dir();
+
+    Ok(removed.len())
+}
+
+#[command]
+pub async fn remove_context_folder(
+    source_folder: String,
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    let ctx_mgr = state
+        .context
+        .as_ref()
+        .ok_or_else(|| "Context manager not initialized".to_string())?;
+
+    let ids = {
+        let ctx = ctx_mgr
+            .lock()
+            .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+        ctx.resource_ids_for_folder(&source_folder)
+    };
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    delete_context_resources_from_database(&state, &ids, "remove folder")?;
+
+    let mut ctx = ctx_mgr
+        .lock()
+        .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+    let removed = ctx.remove_files(&ids)?;
+    ctx.cleanup_empty_storage_dir();
+
+    Ok(removed.len())
+}
+
+#[command]
+pub async fn clear_context_resources(
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    let ctx_mgr = state
+        .context
+        .as_ref()
+        .ok_or_else(|| "Context manager not initialized".to_string())?;
+
+    let resource_count = {
+        let ctx = ctx_mgr
+            .lock()
+            .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+        ctx.list_resources().len()
+    };
+
+    clear_context_database(&state)?;
+
+    let mut ctx = ctx_mgr
+        .lock()
+        .map_err(|e| format!("Failed to lock context manager: {}", e))?;
+    let removed_count = ctx.remove_all_files()?.len();
+
+    Ok(removed_count.max(resource_count))
 }
 
 #[command]

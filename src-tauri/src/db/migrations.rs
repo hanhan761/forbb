@@ -12,6 +12,7 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
     v4_bookmark_segment_id(conn)?;
     v5_recording_columns(conn)?;
     v6_translation_schema(conn)?;
+    v7_context_source_folder(conn)?;
 
     log::info!("Database migrations completed successfully");
     Ok(())
@@ -224,6 +225,26 @@ fn v6_translation_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
             ON transcript_translations(meeting_id, target_lang);
         ",
     )?;
+    Ok(())
+}
+
+/// Schema v7: preserve the source folder used to import each context file so
+/// the UI can group resources and remove/switch a knowledge-base folder.
+fn v7_context_source_folder(conn: &Connection) -> Result<(), rusqlite::Error> {
+    if let Err(error) = conn.execute_batch(
+        "ALTER TABLE context_resources ADD COLUMN source_folder TEXT NOT NULL DEFAULT ''",
+    ) {
+        let message = error.to_string();
+        if !message.contains("duplicate column") {
+            return Err(error);
+        }
+    }
+
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_context_resources_source_folder
+         ON context_resources(source_folder)",
+    )?;
+
     Ok(())
 }
 

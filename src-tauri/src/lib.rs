@@ -270,6 +270,7 @@ pub fn run() {
                             token_count: db_res.token_count as usize,
                             preview: db_res.preview,
                             loaded_at: db_res.loaded_at,
+                            source_folder: db_res.source_folder,
                         };
                         match ctx.restore_resource(res) {
                             Ok(()) => {}
@@ -614,9 +615,13 @@ pub fn run() {
             // == COMMANDS: context ==
             context_commands::load_context_file,
             context_commands::import_obsidian_vault,
+            context_commands::import_context_folder,
             context_commands::write_obsidian_review,
             context_commands::append_obsidian_mistake_bank,
             context_commands::remove_context_file,
+            context_commands::remove_context_files,
+            context_commands::remove_context_folder,
+            context_commands::clear_context_resources,
             context_commands::list_context_resources,
             context_commands::set_custom_instructions,
             context_commands::get_assembled_context,

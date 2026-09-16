@@ -3,8 +3,6 @@ import { HelpCircle, Sparkles, Check, Clock, X } from "lucide-react";
 import { onQuestionDetected } from "../lib/events";
 import { generateAssist } from "../lib/ipc";
 import { useTranscriptStore } from "../stores/transcriptStore";
-import { useAIActionsStore } from "../stores/aiActionsStore";
-import { useStreamStore } from "../stores/streamStore";
 import { showToast } from "../stores/toastStore";
 import type { DetectedQuestion } from "../lib/types";
 
@@ -29,7 +27,7 @@ function looksLikeQuestion(text: string): boolean {
 }
 
 function questionKey(q: DetectedQuestion): string {
-  return `${q.source}:${q.text.replace(/[?？。！!\s]+$/g, "").replace(/\s+/g, " ").trim().toLowerCase()}`;
+  return `${q.source}:${q.timestamp_ms}:${q.text.replace(/[?？。！!\s]+$/g, "").replace(/\s+/g, " ").trim().toLowerCase()}`;
 }
 
 interface TrackedQuestion extends DetectedQuestion {
@@ -39,79 +37,34 @@ interface TrackedQuestion extends DetectedQuestion {
 export function QuestionDetector({ compact = false }: { compact?: boolean }) {
   const [questions, setQuestions] = useState<TrackedQuestion[]>([]);
   const processedIdsRef = useRef<Set<string>>(new Set());
-  const autoAssistedKeysRef = useRef<Set<string>>(new Set());
-  const autoAssistInFlightRef = useRef(false);
-  const [pendingAutoQuestions, setPendingAutoQuestions] = useState<DetectedQuestion[]>([]);
-  const [autoAnswerCompleted, setAutoAnswerCompleted] = useState(0);
   const segments = useTranscriptStore((s) => s.segments);
-  const autoTrigger = useAIActionsStore((s) => s.configs.globalDefaults.autoTrigger);
-  const isStreaming = useStreamStore((s) => s.isStreaming);
-  const autoTriggerRef = useRef(autoTrigger);
-  const isStreamingRef = useRef(isStreaming);
-
-  useEffect(() => {
-    autoTriggerRef.current = autoTrigger;
-    isStreamingRef.current = isStreaming;
-  }, [autoTrigger, isStreaming]);
-
-  const answerQuestion = useCallback(async (question: DetectedQuestion, automatic: boolean) => {
-    if (automatic) {
-      if (!autoTriggerRef.current) return;
-      if (autoAssistInFlightRef.current || isStreamingRef.current) {
-        setPendingAutoQuestions((pending) => [...pending, question].slice(-3));
-        return;
-      }
-      autoAssistInFlightRef.current = true;
-    }
-
+  const answerQuestion = useCallback(async (question: DetectedQuestion) => {
     try {
-      // Automatic answers always use the local knowledge base first and stay
-      // short enough to read aloud. Qwen then supplies the final wording.
-      await generateAssist("AskQuestion", question.text, "search_files", "short");
+      // Automatic scheduling is owned by the launcher hook. This component is
+      // only the overlay display/manual retry surface, so a click here uses
+      // the same deterministic auto route without duplicating auto requests.
+      await generateAssist("AskQuestion", question.text, "auto", "normal");
     } catch (err) {
       setQuestions((prev) =>
         prev.map((item) =>
           questionKey(item) === questionKey(question) ? { ...item, assisted: false } : item,
         ),
       );
-      if (automatic) {
-        showToast(
-          err instanceof Error ? err.message : "自动回答失败，请检查 Qwen API 或知识库配置",
-          "error",
-        );
-      }
-    } finally {
-      if (automatic) {
-        autoAssistInFlightRef.current = false;
-        setAutoAnswerCompleted((count) => count + 1);
-      }
+      showToast(
+        err instanceof Error ? err.message : "回答失败，请检查 Qwen API 或知识库配置",
+        "error",
+      );
     }
   }, []);
 
-  useEffect(() => {
-    if (pendingAutoQuestions.length === 0 || isStreaming || autoAssistInFlightRef.current) return;
-    const [next, ...rest] = pendingAutoQuestions;
-    setPendingAutoQuestions(rest);
-    void answerQuestion(next, true);
-  }, [answerQuestion, autoAnswerCompleted, isStreaming, pendingAutoQuestions]);
-
   const addQuestion = useCallback((q: DetectedQuestion) => {
     const key = questionKey(q);
-    const shouldAutoAssist =
-      autoTriggerRef.current &&
-      !autoAssistedKeysRef.current.has(key);
-
-    if (shouldAutoAssist) {
-      autoAssistedKeysRef.current.add(key);
-      void answerQuestion(q, true);
-    }
 
     setQuestions((prev) => {
-      if (prev.length > 0 && prev[0].text === q.text) return prev;
-      return [{ ...q, assisted: shouldAutoAssist }, ...prev].slice(0, 10);
+      if (prev.some((item) => questionKey(item) === key)) return prev;
+      return [{ ...q, assisted: false }, ...prev].slice(0, 10);
     });
-
-  }, [answerQuestion]);
+  }, []);
 
   useEffect(() => {
     const p = onQuestionDetected((event) => {
@@ -138,7 +91,7 @@ export function QuestionDetector({ compact = false }: { compact?: boolean }) {
     setQuestions((prev) =>
       prev.map((q, i) => i === index ? { ...q, assisted: true } : q)
     );
-    void answerQuestion(question, false);
+    void answerQuestion(question);
   }, [answerQuestion, questions]);
 
   const handleDismiss = useCallback((index: number, e: React.MouseEvent) => {

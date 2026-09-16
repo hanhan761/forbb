@@ -9,9 +9,11 @@ import { showToast } from "../stores/toastStore";
 interface ResourceCardProps {
   resource: ContextResource;
   onRemove: (id: string) => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export function ResourceCard({ resource, onRemove }: ResourceCardProps) {
+export function ResourceCard({ resource, onRemove, selected = false, onToggleSelect }: ResourceCardProps) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const contextStrategy = useConfigStore((s) => s.contextStrategy);
   const indexStatus = useRagStore((s) => s.indexStatus);
@@ -48,7 +50,17 @@ export function ResourceCard({ resource, onRemove }: ResourceCardProps) {
   const fileIndexStatus = getFileIndexBadge(resource, isRagActive, indexStatus);
 
   return (
-    <div className="group relative flex items-start gap-3 rounded-xl border border-border/40 bg-secondary/20 p-3.5 transition-colors hover:bg-secondary/40">
+    <div className={`group relative flex items-start gap-3 rounded-xl border p-3.5 transition-colors ${selected ? "border-primary/40 bg-primary/5" : "border-border/40 bg-secondary/20 hover:bg-secondary/40"}`}>
+      {onToggleSelect && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label={`Select ${resource.name}`}
+          className="mt-2 h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary"
+        />
+      )}
+
       {/* File type icon */}
       <div
         className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg"

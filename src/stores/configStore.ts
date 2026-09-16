@@ -13,6 +13,7 @@ import type {
   GroqConfig,
   AudioMode,
   AIScenario,
+  AnswerLanguage,
 } from "../lib/types";
 import {
   DEFAULT_REMOTE_STT_PROVIDER,
@@ -46,6 +47,15 @@ const DEFAULT_GROQ_CONFIG: GroqConfig = {
 };
 
 const STORE_FILE = "config.json";
+
+const DEFAULT_OVERLAY_OPACITY = 0.65;
+
+function normalizeOverlayOpacity(value: number | null | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_OVERLAY_OPACITY;
+  }
+  return Math.min(1, Math.max(0.1, value));
+}
 
 const DEFAULT_HOTKEYS: HotkeyConfig = {
   toggle_assist: "Space",
@@ -147,6 +157,7 @@ interface ConfigState {
   autoTrigger: boolean;
   autoSummary: boolean;
   contextWindowSeconds: number;
+  answerLanguage: AnswerLanguage;
 
   // System
   startOnLogin: boolean;
@@ -234,6 +245,7 @@ interface ConfigState {
   setAutoTrigger: (enabled: boolean) => void;
   setAutoSummary: (enabled: boolean) => void;
   setContextWindowSeconds: (seconds: number) => void;
+  setAnswerLanguage: (language: AnswerLanguage) => void;
   setStartOnLogin: (enabled: boolean) => void;
   setDataDirectory: (dir: string) => void;
   setFirstRunCompleted: (completed: boolean) => void;
@@ -297,6 +309,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   autoTrigger: true,
   autoSummary: true,
   contextWindowSeconds: 120,
+  answerLanguage: "zh",
   startOnLogin: false,
   dataDirectory: "",
   firstRunCompleted: false,
@@ -548,6 +561,10 @@ export const useConfigStore = create<ConfigState>((set) => ({
     set({ contextWindowSeconds: seconds });
     persistValue("contextWindowSeconds", seconds);
   },
+  setAnswerLanguage: (language) => {
+    set({ answerLanguage: language });
+    persistValue("answerLanguage", language);
+  },
   setStartOnLogin: (enabled) => {
     set({ startOnLogin: enabled });
     persistValue("startOnLogin", enabled);
@@ -642,8 +659,9 @@ export const useConfigStore = create<ConfigState>((set) => ({
     persistValue("aiResponseAlign", align);
   },
   setOverlayOpacity: (opacity) => {
-    set({ overlayOpacity: opacity });
-    persistValue("overlayOpacity", opacity);
+    const normalized = normalizeOverlayOpacity(opacity);
+    set({ overlayOpacity: normalized });
+    persistValue("overlayOpacity", normalized);
   },
   setShowPostMeetingTranslation: (enabled) => {
     set({ showPostMeetingTranslation: enabled });
@@ -724,6 +742,13 @@ export const useConfigStore = create<ConfigState>((set) => ({
       const autoTrigger = await store.get<boolean>("autoTrigger");
       const autoSummary = await store.get<boolean>("autoSummary");
       const contextWindowSeconds = await store.get<number>("contextWindowSeconds");
+      const persistedAnswerLanguage = await store.get<string>("answerLanguage");
+      const answerLanguage: AnswerLanguage | undefined =
+        persistedAnswerLanguage === "zh" ||
+        persistedAnswerLanguage === "en" ||
+        persistedAnswerLanguage === "bilingual"
+          ? persistedAnswerLanguage
+          : undefined;
       const startOnLogin = await store.get<boolean>("startOnLogin");
       const dataDirectory = await store.get<string>("dataDirectory");
       const firstRunCompleted = await store.get<boolean>("firstRunCompleted");
@@ -917,6 +942,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         ...(autoTrigger != null && { autoTrigger }),
         ...(autoSummary != null && { autoSummary }),
         ...(contextWindowSeconds != null && { contextWindowSeconds }),
+        ...(answerLanguage != null && { answerLanguage }),
         ...(startOnLogin != null && { startOnLogin }),
         ...(dataDirectory != null && { dataDirectory }),
         ...(firstRunCompleted != null && { firstRunCompleted }),
@@ -946,7 +972,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         aiResponseLineHeight: aiResponseLineHeight ?? 1.6,
         aiResponseHPad: aiResponseHPad ?? 0,
         aiResponseAlign: (aiResponseAlign as "left" | "center" | "right") ?? "left",
-        overlayOpacity: overlayOpacity ?? 0.65,
+        overlayOpacity: normalizeOverlayOpacity(overlayOpacity),
         sttLanguage: sttLanguage ?? "en-US",
         showPostMeetingTranslation: showPostMeetingTranslation ?? true,
         ...(trayNotifications != null && { trayNotifications }),
@@ -1017,7 +1043,12 @@ export const useConfigStore = create<ConfigState>((set) => ({
         if (val != null) set({ whisperDualPass: val });
       });
       store.onKeyChange<number>("overlayOpacity", (val) => {
-        if (val != null) set({ overlayOpacity: val });
+        if (val != null) set({ overlayOpacity: normalizeOverlayOpacity(val) });
+      });
+      store.onKeyChange<AnswerLanguage>("answerLanguage", (val) => {
+        if (val === "zh" || val === "en" || val === "bilingual") {
+          set({ answerLanguage: val });
+        }
       });
 
       // Sync persisted STT language to Rust backend on startup.

@@ -9,12 +9,16 @@ import { showToast } from "../stores/toastStore";
 export function FileUpload() {
   const loadFile = useContextStore((s) => s.loadFile);
   const importVault = useContextStore((s) => s.importVault);
+  const importFolder = useContextStore((s) => s.importFolder);
+  const removeFiles = useContextStore((s) => s.removeFiles);
+  const resources = useContextStore((s) => s.resources);
   const contextStrategy = useConfigStore((s) => s.contextStrategy);
   const autoIndexFile = useRagStore((s) => s.autoIndexFile);
   const rebuildIndex = useRagStore((s) => s.rebuildIndex);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImportingVault, setIsImportingVault] = useState(false);
+  const [isImportingFolder, setIsImportingFolder] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const processFile = useCallback(
@@ -141,6 +145,65 @@ export function FileUpload() {
     }
   }, [importVault, contextStrategy, rebuildIndex]);
 
+  const handleImportFolder = useCallback(async (replaceExisting: boolean) => {
+    try {
+      setIsImportingFolder(true);
+      setErrorMessage(null);
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: replaceExisting ? "Replace Knowledge Base Folder" : "Choose Knowledge Base Folder",
+      });
+      if (!selected || Array.isArray(selected)) return;
+
+      const previousResourceIds = resources.map((resource) => resource.id);
+      if (replaceExisting && previousResourceIds.length > 0) {
+        const confirmed = window.confirm(
+          `用新文件夹替换当前知识库中的 ${previousResourceIds.length} 个文件？\n\n会先验证并导入新文件夹；原始文件不会被删除，只会清理旧的应用内副本和索引。`,
+        );
+        if (!confirmed) return;
+      }
+
+      const result = await importFolder(selected);
+      if (result.imported.length === 0) {
+        showToast("Selected folder contains no usable files", "error");
+        return;
+      }
+
+      // Only remove the old set after the new folder has produced at least
+      // one usable resource. This keeps a failed/empty replacement reversible.
+      if (replaceExisting && previousResourceIds.length > 0) {
+        await removeFiles(previousResourceIds);
+      }
+
+      let indexError: string | null = null;
+      if (contextStrategy === "local_rag") {
+        await rebuildIndex();
+        indexError = useRagStore.getState().error;
+      }
+
+      if (indexError) {
+        showToast(
+          `Imported ${result.imported.length} file${result.imported.length === 1 ? "" : "s"}, but indexing failed: ${indexError}`,
+          "info",
+        );
+      } else {
+        const skipped = result.skipped.length;
+        showToast(
+          `${replaceExisting ? "Replaced" : "Imported"} ${result.imported.length} knowledge-base file${result.imported.length === 1 ? "" : "s"}${skipped > 0 ? ` (${skipped} skipped)` : ""}`,
+          skipped > 0 ? "info" : "success",
+        );
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErrorMessage(msg);
+      showToast(msg, "error");
+      setTimeout(() => setErrorMessage(null), 5000);
+    } finally {
+      setIsImportingFolder(false);
+    }
+  }, [contextStrategy, importFolder, rebuildIndex, removeFiles, resources]);
+
   return (
     <div className="w-full">
       {/* Drop zone */}
@@ -208,12 +271,47 @@ export function FileUpload() {
         <button
           type="button"
           onClick={handleImportVault}
-          disabled={isProcessing || isImportingVault}
+          disabled={isProcessing || isImportingVault || isImportingFolder}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isImportingVault && <Loader2 className="h-3 w-3 animate-spin" />}
           {isImportingVault ? "Importing..." : "Choose Vault"}
         </button>
+      </div>
+
+      {/* Generic knowledge-base folder management. Files are copied into the
+          app-managed context store; the selected source folder is metadata. */}
+      <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <FolderOpen className="h-4 w-4 shrink-0 text-primary/70" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-foreground">Knowledge Base Folder</p>
+              <p className="truncate text-meta text-muted-foreground">
+                Import PDF, TXT, Markdown, and DOCX files recursively
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleImportFolder(false)}
+              disabled={isProcessing || isImportingVault || isImportingFolder}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/20 bg-background/40 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isImportingFolder && <Loader2 className="h-3 w-3 animate-spin" />}
+              Choose Folder
+            </button>
+            <button
+              type="button"
+              onClick={() => handleImportFolder(true)}
+              disabled={isProcessing || isImportingVault || isImportingFolder}
+              className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Replace
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Error toast */}

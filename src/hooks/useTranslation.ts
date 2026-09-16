@@ -12,6 +12,21 @@ import { useMeetingStore } from "../stores/meetingStore";
 import { translateSegments, getMeetingTranslations } from "../lib/ipc";
 import type { TranscriptUpdateEvent } from "../lib/types";
 
+interface PendingAutoTranslation {
+  requestId: number;
+  meetingId: string;
+  text: string;
+  sourceLang: string;
+  sourceSetting: string;
+  targetLang: string;
+}
+
+function normalizeSegmentLanguage(language?: string): string | undefined {
+  if (!language || language === "auto") return undefined;
+  const normalized = language.trim().toLowerCase().split(/[-_]/)[0];
+  return normalized && normalized !== "auto" ? normalized : undefined;
+}
+
 interface UseTranslationOptions {
   /**
    * Only the launcher should start automatic translation requests. The
@@ -41,6 +56,8 @@ export function useTranslation({ enableAutoTranslate = true }: UseTranslationOpt
   const sourceLangRef = useRef(sourceLang);
   const setTranslatingRef = useRef(setTranslating);
   const meetingIdRef = useRef(meetingId);
+  const pendingAutoTranslationsRef = useRef<Map<string, PendingAutoTranslation>>(new Map());
+  const nextRequestIdRef = useRef(0);
 
   useEffect(() => {
     addRef.current = addTranslation;
@@ -63,6 +80,33 @@ export function useTranslation({ enableAutoTranslate = true }: UseTranslationOpt
     const setup = async () => {
       const u1 = await onTranslationResult((result) => {
         if (!mounted) return;
+
+        // A segment id can receive a corrected final transcript or a result
+        // from an earlier target-language selection. Never let that stale
+        // result overwrite the newest request for the same segment.
+        if (result.segment_id) {
+          const pending = pendingAutoTranslationsRef.current.get(result.segment_id);
+          if (pending) {
+            const expectedSource = pending.sourceLang || "auto";
+            if (
+              pending.meetingId !== meetingIdRef.current ||
+              pending.sourceSetting !== sourceLangRef.current ||
+              pending.targetLang !== targetLangRef.current ||
+              result.original_text !== pending.text ||
+              result.target_lang !== pending.targetLang ||
+              result.source_lang !== expectedSource
+            ) {
+              console.warn("[translation] Ignoring stale or mismatched result", {
+                segmentId: result.segment_id,
+                expectedText: pending.text,
+                receivedText: result.original_text,
+                expectedTarget: pending.targetLang,
+                receivedTarget: result.target_lang,
+              });
+              return;
+            }
+          }
+        }
         addRef.current(result);
       });
 
@@ -142,16 +186,36 @@ export function useTranslation({ enableAutoTranslate = true }: UseTranslationOpt
 
           if (!currentActive || !currentMid || !currentTarget) return;
 
+          // When source is set to auto, use the STT language hint when one is
+          // available. This prevents Qwen from guessing from a short or
+          // mixed-language fragment while retaining auto-detection otherwise.
+          const requestSource =
+            currentSource === "auto"
+              ? normalizeSegmentLanguage(segment.language)
+              : currentSource;
+          const requestId = ++nextRequestIdRef.current;
+          pendingAutoTranslationsRef.current.set(segmentId, {
+            requestId,
+            meetingId: currentMid,
+            text: segment.text,
+            sourceLang: requestSource ?? "auto",
+            sourceSetting: currentSource,
+            targetLang: currentTarget,
+          });
+
           setTranslatingRef.current(segmentId, true);
           translateSegments(
             [segmentId],
             [segment.text],
             currentMid,
             currentTarget,
-            currentSource === "auto" ? undefined : currentSource,
+            requestSource,
           ).catch((err) => {
             console.error("[useTranslation] Auto-translate failed:", err);
-            setTranslatingRef.current(segmentId, false);
+            const latest = pendingAutoTranslationsRef.current.get(segmentId);
+            if (latest?.requestId === requestId) {
+              setTranslatingRef.current(segmentId, false);
+            }
           });
         }, 200);
 
@@ -174,6 +238,7 @@ export function useTranslation({ enableAutoTranslate = true }: UseTranslationOpt
         clearTimeout(timer);
       }
       debounceTimers.clear();
+      pendingAutoTranslationsRef.current.clear();
       if (unFinal) unFinal();
     };
   }, [enableAutoTranslate]);

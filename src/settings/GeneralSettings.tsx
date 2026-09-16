@@ -143,7 +143,7 @@ export function GeneralSettings() {
             <div>
               <label className="text-sm font-medium text-foreground">Overlay Transparency</label>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                How transparent the overlay background is
+                Adjusts the overlay live and remembers your last setting
               </p>
             </div>
           </div>

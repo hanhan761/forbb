@@ -19,6 +19,7 @@ import type {
   OpenRouterModel,
   OllamaEmbeddingStatus,
   ObsidianVaultImportResult,
+  ContextFolderImportResult,
   PartyAudioConfig,
   RagConfig,
   RagIndexStatus,
@@ -33,6 +34,7 @@ import type {
   QueryRoute,
   PrepareCheck,
   AnswerLength,
+  AnswerLanguage,
 } from "./types";
 
 // == IPC: Audio (Sub-PRD 3) ==
@@ -217,7 +219,8 @@ export async function generateAssist(
   mode: string,
   customQuestion?: string,
   route?: QueryRoute,
-  answerLength?: AnswerLength
+  answerLength?: AnswerLength,
+  answerLanguage?: AnswerLanguage
 ): Promise<void> {
   // Universal transcript: gather all final segments from the frontend store
   // (the single source of truth — every STT engine feeds into it).
@@ -239,6 +242,7 @@ export async function generateAssist(
     customQuestion,
     route,
     answerLength,
+    answerLanguage: answerLanguage ?? config.answerLanguage,
     reasoningEffort: config.llmReasoningLevel,
     glossary,
     transcriptSegments: JSON.stringify(segments),
@@ -293,6 +297,13 @@ export async function importObsidianVault(
   return JSON.parse(result);
 }
 
+export async function importContextFolder(
+  folderPath: string
+): Promise<ContextFolderImportResult> {
+  const result = await invoke<string>("import_context_folder", { folderPath });
+  return JSON.parse(result);
+}
+
 export async function writeObsidianReview(options: {
   directory: string;
   title: string;
@@ -339,6 +350,18 @@ export async function appendObsidianMistakeBank(options: {
 
 export async function removeContextFile(resourceId: string): Promise<void> {
   return invoke("remove_context_file", { resourceId });
+}
+
+export async function removeContextFiles(resourceIds: string[]): Promise<number> {
+  return invoke<number>("remove_context_files", { resourceIds });
+}
+
+export async function removeContextFolder(sourceFolder: string): Promise<number> {
+  return invoke<number>("remove_context_folder", { sourceFolder });
+}
+
+export async function clearContextResources(): Promise<number> {
+  return invoke<number>("clear_context_resources");
 }
 
 export async function listContextResources(): Promise<ContextResource[]> {

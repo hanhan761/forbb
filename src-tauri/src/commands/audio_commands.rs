@@ -9,8 +9,38 @@ use crate::audio::device_manager;
 use crate::audio::session_monitor;
 use crate::audio::vad::{calculate_peak, calculate_rms, VoiceActivityDetector};
 use crate::audio::{AudioCaptureManager, AudioLevel, AudioSource};
+use crate::intelligence::IntelligenceEngine;
 use crate::stt::provider::STTProvider;
 use crate::state::{ActiveAudioCapture, AppState};
+
+/// Feed a final remote-party transcript into the intelligence engine and
+/// publish every question it detects.  All audio STT paths must use this
+/// helper: the frontend `push_transcript` command is only used by browser STT
+/// and is not involved in the pure API Qwen path.
+fn push_final_remote_transcript(
+    app: &AppHandle,
+    intelligence: &Option<Arc<std::sync::Mutex<IntelligenceEngine>>>,
+    text: String,
+    timestamp_ms: u64,
+) {
+    let questions = intelligence
+        .as_ref()
+        .and_then(|intel| intel.lock().ok())
+        .map(|mut engine| {
+            engine.push_transcript(text, "Them".to_string(), timestamp_ms, true)
+        })
+        .unwrap_or_default();
+
+    for question in questions {
+        let payload = serde_json::json!({
+            "text": question.text,
+            "confidence": question.confidence,
+            "timestamp_ms": question.timestamp_ms,
+            "source": question.source,
+        });
+        let _ = app.emit("question_detected", &payload);
+    }
+}
 
 /// List all available audio input and output devices.
 #[command]
@@ -199,16 +229,12 @@ pub async fn start_capture(
                     // Push final segments to the intelligence engine's
                     // transcript buffer so the AI has access to what "Them" said.
                     if output.is_final {
-                        if let Some(ref intel) = intel_arc {
-                            if let Ok(mut engine) = intel.lock() {
-                                engine.push_transcript(
-                                    output.text.clone(),
-                                    "Them".to_string(),
-                                    output.timestamp_ms,
-                                    true,
-                                );
-                            }
-                        }
+                        push_final_remote_transcript(
+                            &stt_app,
+                            &intel_arc,
+                            output.text.clone(),
+                            output.timestamp_ms,
+                        );
                     }
                 }
             }
@@ -1349,16 +1375,12 @@ pub async fn start_capture_per_party(
 
                     // Push final segments to the intelligence engine
                     if output.is_final {
-                        if let Some(ref intel) = intel_arc {
-                            if let Ok(mut engine) = intel.lock() {
-                                engine.push_transcript(
-                                    output.text.clone(),
-                                    "Them".to_string(),
-                                    output.timestamp_ms,
-                                    true,
-                                );
-                            }
-                        }
+                        push_final_remote_transcript(
+                            &stt_app,
+                            &intel_arc,
+                            output.text.clone(),
+                            output.timestamp_ms,
+                        );
                     }
                 }
             }
@@ -1387,16 +1409,12 @@ pub async fn start_capture_per_party(
                 let payload = serde_json::json!({ "segment": seg });
                 let _ = stt_app.emit("transcript_final", &payload);
 
-                if let Some(ref intel) = intel_arc {
-                    if let Ok(mut engine) = intel.lock() {
-                        engine.push_transcript(
-                            output.text.clone(),
-                            "Them".to_string(),
-                            output.timestamp_ms,
-                            true,
-                        );
-                    }
-                }
+                push_final_remote_transcript(
+                    &stt_app,
+                    &intel_arc,
+                    output.text.clone(),
+                    output.timestamp_ms,
+                );
             }
         });
     }

@@ -3,6 +3,7 @@ pub mod pdf_extractor;
 pub mod resource_cache;
 pub mod token_counter;
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +24,9 @@ pub struct ContextResource {
     pub token_count: usize,
     pub preview: String,
     pub loaded_at: String,
+    /// Canonical folder selected by the user when this resource was imported.
+    /// The folder is metadata only; deletion never removes this source path.
+    pub source_folder: String,
 }
 
 /// Loads, caches, and serves context text from files.
@@ -72,6 +76,16 @@ impl ContextManager {
     /// Load a file into the context manager.
     /// Copies the file to the context directory, extracts text, and caches it.
     pub fn load_file(&mut self, file_path: &str) -> Result<ContextResource, String> {
+        self.load_file_with_source_folder(file_path, None)
+    }
+
+    /// Load a file and associate it with an import folder. When no folder is
+    /// supplied, the file's parent directory is used for single-file imports.
+    pub fn load_file_with_source_folder(
+        &mut self,
+        file_path: &str,
+        source_folder: Option<&str>,
+    ) -> Result<ContextResource, String> {
         let source_path = Path::new(file_path);
 
         if !source_path.exists() {
@@ -109,6 +123,8 @@ impl ContextManager {
             .to_string();
 
         // Copy file to context directory with unique name to avoid collisions
+        fs::create_dir_all(&self.context_dir)
+            .map_err(|e| format!("Failed to create context directory: {}", e))?;
         let dest_filename = format!("{}_{}", resource_id, file_name);
         let dest_path = self.context_dir.join(&dest_filename);
 
@@ -155,6 +171,11 @@ impl ContextManager {
 
         // Timestamp
         let loaded_at = chrono::Utc::now().to_rfc3339();
+        let source_folder = source_folder
+            .map(PathBuf::from)
+            .or_else(|| source_path.parent().map(Path::to_path_buf))
+            .map(|path| Self::normalize_source_folder(&path))
+            .unwrap_or_default();
 
         // Create resource
         let resource = ContextResource {
@@ -169,6 +190,7 @@ impl ContextManager {
             token_count,
             preview,
             loaded_at: loaded_at.clone(),
+            source_folder,
         };
 
         // Cache the extracted text
@@ -191,6 +213,13 @@ impl ContextManager {
         );
 
         Ok(resource)
+    }
+
+    fn normalize_source_folder(path: &Path) -> String {
+        fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy()
+            .into_owned()
     }
 
     /// Restore a previously-persisted resource from stored metadata.
@@ -256,6 +285,81 @@ impl ContextManager {
         log::info!("Removed context resource: {}", resource.name);
 
         Ok(())
+    }
+
+    /// Remove several resources atomically from the in-memory list after
+    /// validating that every requested id exists. Files are app-managed
+    /// copies, so this never touches `source_folder`.
+    pub fn remove_files(&mut self, resource_ids: &[String]) -> Result<Vec<ContextResource>, String> {
+        let mut seen = HashSet::new();
+        let unique_ids: Vec<String> = resource_ids
+            .iter()
+            .filter_map(|resource_id| {
+                if seen.insert(resource_id.clone()) {
+                    Some(resource_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut resources = Vec::with_capacity(unique_ids.len());
+        for resource_id in &unique_ids {
+            let resource = self
+                .resources
+                .iter()
+                .find(|resource| resource.id == *resource_id)
+                .cloned()
+                .ok_or_else(|| format!("Resource not found: {}", resource_id))?;
+            resources.push(resource);
+        }
+
+        for resource_id in &unique_ids {
+            self.remove_file(resource_id)?;
+        }
+
+        Ok(resources)
+    }
+
+    /// Return the IDs belonging to a source folder without mutating state.
+    /// Commands use this snapshot before deleting database rows.
+    pub fn resource_ids_for_folder(&self, source_folder: &str) -> Vec<String> {
+        let normalized = Self::normalize_source_folder(Path::new(source_folder));
+        self.resources
+            .iter()
+            .filter(|resource| resource.source_folder == normalized)
+            .map(|resource| resource.id.clone())
+            .collect()
+    }
+
+    /// Remove all resources imported from a source folder.
+    pub fn remove_folder(&mut self, source_folder: &str) -> Result<Vec<ContextResource>, String> {
+        let ids = self.resource_ids_for_folder(source_folder);
+        self.remove_files(&ids)
+    }
+
+    /// Remove the app-managed storage directory when no copied resources
+    /// remain. This is intentionally separate from source-folder metadata so
+    /// a source directory selected by the user is never removed.
+    pub fn cleanup_empty_storage_dir(&self) {
+        if !self.resources.is_empty() {
+            return;
+        }
+
+        if let Err(error) = fs::remove_dir(&self.context_dir) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                log::debug!("Context storage directory was not removed: {}", error);
+            }
+        }
+    }
+
+    /// Remove every loaded resource and delete the now-empty app-managed
+    /// storage directory. It is recreated on the next import.
+    pub fn remove_all_files(&mut self) -> Result<Vec<ContextResource>, String> {
+        let ids: Vec<String> = self.resources.iter().map(|resource| resource.id.clone()).collect();
+        let removed = self.remove_files(&ids)?;
+        self.cleanup_empty_storage_dir();
+        Ok(removed)
     }
 
     /// List all loaded context resources.
@@ -380,5 +484,52 @@ impl ContextManager {
             transcript_tokens,
             model_context_window,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ContextManager, ResourceCache};
+    use std::fs;
+    use uuid::Uuid;
+
+    #[test]
+    fn imports_and_removes_resources_by_source_folder_without_deleting_source() {
+        let root = std::env::temp_dir().join(format!("nexq-context-test-{}", Uuid::new_v4()));
+        let source = root.join("knowledge-base");
+        let managed = root.join("managed-context");
+        fs::create_dir_all(&source).expect("create source folder");
+        fs::create_dir_all(&managed).expect("create managed folder");
+        let source_file = source.join("notes.txt");
+        fs::write(&source_file, "A question about the project.").expect("write source file");
+
+        let mut manager = ContextManager {
+            context_dir: managed.clone(),
+            resources: Vec::new(),
+            cache: ResourceCache::new(),
+            custom_instructions: String::new(),
+        };
+
+        let resource = manager
+            .load_file_with_source_folder(
+                source_file.to_str().expect("source path"),
+                Some(source.to_str().expect("folder path")),
+            )
+            .expect("import source file");
+
+        assert_eq!(
+            resource.source_folder,
+            fs::canonicalize(&source)
+                .expect("canonical source folder")
+                .to_string_lossy()
+                .to_string()
+        );
+        assert!(source_file.exists(), "import must not delete source file");
+        assert_eq!(manager.remove_folder(source.to_str().expect("folder path")).unwrap().len(), 1);
+        assert!(manager.list_resources().is_empty());
+        assert!(source.exists(), "folder removal must not delete source folder");
+
+        manager.cleanup_empty_storage_dir();
+        let _ = fs::remove_dir_all(root);
     }
 }
