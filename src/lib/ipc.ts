@@ -253,6 +253,11 @@ export async function cancelGeneration(): Promise<void> {
   return invoke("cancel_generation");
 }
 
+/** Apply opacity to the native overlay window as well as its webview contents. */
+export async function setOverlayOpacity(opacity: number): Promise<void> {
+  return invoke("set_overlay_opacity", { opacity });
+}
+
 export async function setAutoTrigger(enabled: boolean): Promise<void> {
   return invoke("set_auto_trigger", { enabled });
 }

@@ -116,3 +116,14 @@
 | What's the goal? | 完成 Qwen 纯 API 版的问答/翻译、语言、透明度、知识库管理调整 |
 | What have I learned? | 纯 API Qwen 音频路径漏发问题事件是“只翻译不回答”的主要断点；详细发现见 `findings.md` |
 | What have I done? | 四项需求已实现并完成构建、Rust 70 项回归测试和差异审查 |
+
+## Follow-up Session: 2026-09-17 — context contamination
+
+### Status: complete
+
+- 根据用户截图定位到 `quick_answer` 仍带论文内容的确切原因：live prompt 无条件注入 `Hot Context`，且无个人资料时回退到第一个资源。
+- 先新增失败回归测试 `does_not_promote_a_paper_project_to_live_hot_context`，确认旧逻辑会把 CSI-Bench 论文提升为常驻上下文。
+- 修复文件上下文策略：仅 `SearchFiles` 可注入文件热上下文；个人资料采用高置信文件名匹配；论文/项目/笔记保留在按问题触发的 RAG 路径。
+- 补齐始终可见的中文知识库管理栏、整窗原生透明度同步、默认双语状态标识，并生成 Nature 风格使用说明。
+- 增加回答语言一次性迁移：旧版本隐式默认 `zh` 自动转为 `bilingual`；用户显式选择单语后通过版本标记保留该选择。
+- 验证：`npm run build` 通过；`cargo test --locked --manifest-path src-tauri/Cargo.toml` 通过 74/74；`git diff --check` 通过；`npm run tauri:build` 生成 Windows NSIS 安装包。

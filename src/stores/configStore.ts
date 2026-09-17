@@ -49,6 +49,7 @@ const DEFAULT_GROQ_CONFIG: GroqConfig = {
 const STORE_FILE = "config.json";
 
 const DEFAULT_OVERLAY_OPACITY = 0.65;
+const ANSWER_LANGUAGE_SETTINGS_VERSION = 1;
 
 function normalizeOverlayOpacity(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -309,7 +310,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   autoTrigger: true,
   autoSummary: true,
   contextWindowSeconds: 120,
-  answerLanguage: "zh",
+  answerLanguage: "bilingual",
   startOnLogin: false,
   dataDirectory: "",
   firstRunCompleted: false,
@@ -564,6 +565,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   setAnswerLanguage: (language) => {
     set({ answerLanguage: language });
     persistValue("answerLanguage", language);
+    persistValue("answerLanguageVersion", ANSWER_LANGUAGE_SETTINGS_VERSION);
   },
   setStartOnLogin: (enabled) => {
     set({ startOnLogin: enabled });
@@ -743,12 +745,24 @@ export const useConfigStore = create<ConfigState>((set) => ({
       const autoSummary = await store.get<boolean>("autoSummary");
       const contextWindowSeconds = await store.get<number>("contextWindowSeconds");
       const persistedAnswerLanguage = await store.get<string>("answerLanguage");
-      const answerLanguage: AnswerLanguage | undefined =
+      const persistedAnswerLanguageVersion = await store.get<number>("answerLanguageVersion");
+      const storedAnswerLanguage: AnswerLanguage | undefined =
         persistedAnswerLanguage === "zh" ||
         persistedAnswerLanguage === "en" ||
         persistedAnswerLanguage === "bilingual"
           ? persistedAnswerLanguage
           : undefined;
+      // `zh` was the product default before bilingual output became the
+      // default. Migrate that old implicit value once, while preserving an
+      // explicit choice made after this setting was introduced.
+      const answerLanguage: AnswerLanguage | undefined =
+        storedAnswerLanguage === "zh" && persistedAnswerLanguageVersion !== ANSWER_LANGUAGE_SETTINGS_VERSION
+          ? "bilingual"
+          : storedAnswerLanguage;
+      if (storedAnswerLanguage != null && persistedAnswerLanguageVersion !== ANSWER_LANGUAGE_SETTINGS_VERSION) {
+        await store.set("answerLanguage", answerLanguage);
+        await store.set("answerLanguageVersion", ANSWER_LANGUAGE_SETTINGS_VERSION);
+      }
       const startOnLogin = await store.get<boolean>("startOnLogin");
       const dataDirectory = await store.get<string>("dataDirectory");
       const firstRunCompleted = await store.get<boolean>("firstRunCompleted");

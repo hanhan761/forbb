@@ -54,13 +54,16 @@ use commands::translation_commands;
 use commands::translation_model_commands;
 // == MODULE COMMANDS: tray ==
 use commands::tray_commands;
+// == MODULE COMMANDS: window ==
+use commands::window_commands;
 
 /// Enable live blur-behind on a window via the undocumented `SetWindowCompositionAttribute`
 /// (user32). `DwmEnableBlurBehindWindow` (used automatically by tao for `transparent: true`)
 /// is a no-op on Windows 10/11 — this is the API that still works, and (unlike the old
 /// Aero blur) composites the live desktop/other windows behind, not just the wallpaper.
-/// Gradient color alpha is 0, so it adds no tint of its own; the overlay's own CSS
-/// (`.overlay-bg`) provides the adjustable dark tint on top.
+/// Gradient color alpha is 0, so it adds no tint of its own; the overlay's child
+/// panels provide the visual tint while the native opacity command fades the
+/// complete top-level surface.
 #[cfg(target_os = "windows")]
 fn enable_live_blur_behind(hwnd_raw: *mut std::ffi::c_void) {
     use std::ffi::c_void;
@@ -562,6 +565,10 @@ pub fn run() {
                 }
             }
 
+            // Match the frontend's persisted default until the first config
+            // update arrives from the overlay/launcher webview.
+            let _ = window_commands::set_overlay_opacity(app.handle().clone(), 0.65);
+
             log::info!("NexQ initialized successfully");
             Ok(())
         })
@@ -675,6 +682,8 @@ pub fn run() {
             tray_commands::set_tray_tooltip,
             tray_commands::set_meeting_start_time,
             tray_commands::rebuild_tray_menu,
+            // == COMMANDS: window ==
+            window_commands::set_overlay_opacity,
             // == COMMANDS: gemini cache ==
             gemini_cache_commands::create_gemini_context_cache,
             gemini_cache_commands::delete_gemini_context_cache,

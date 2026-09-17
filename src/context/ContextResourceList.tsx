@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, FolderOpen, Trash2 } from "lucide-react";
+import { FileText, FolderOpen, ListChecks, Trash2 } from "lucide-react";
 import { useContextStore } from "../stores/contextStore";
 import { showToast } from "../stores/toastStore";
 import { ResourceCard } from "./ResourceCard";
@@ -89,31 +89,42 @@ export function ContextResourceList() {
     resources.every((resource) => selectedIds.has(resource.id));
 
   return (
-    <section>
-      <div className="mb-2 flex items-center gap-2">
+    <section aria-label="知识库文件管理">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <FileText className="h-3 w-3 text-muted-foreground/60" />
-        <span className="text-meta font-semibold uppercase tracking-wider text-muted-foreground/60">
-          Sources ({resources.length})
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+          知识库文件 ({resources.length})
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={() => setSelectedIds(allSelected ? new Set() : new Set(resources.map((resource) => resource.id)))}
-            className="text-meta text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-secondary/20 px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
+            aria-label={allSelected ? "取消全选知识库文件" : "全选知识库文件"}
           >
             {allSelected ? "取消全选" : "全选"}
           </button>
-          {selectedIds.size > 0 && (
-            <button
-              type="button"
-              onClick={handleRemoveSelected}
-              className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-1 text-meta font-medium text-destructive transition-colors hover:bg-destructive/20"
-            >
-              <Trash2 className="h-3 w-3" />
-              删除选中 ({selectedIds.size})
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleRemoveSelected}
+            disabled={selectedIds.size === 0}
+            className="inline-flex items-center gap-1 rounded-md border border-destructive/25 bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20 disabled:cursor-not-allowed disabled:border-border/30 disabled:bg-secondary/20 disabled:text-muted-foreground/50"
+            aria-label="批量删除知识库文件"
+            title={selectedIds.size === 0 ? "请先勾选要删除的文件" : `删除已选的 ${selectedIds.size} 个文件`}
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+            批量删除{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+          </button>
         </div>
+      </div>
+
+      <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-2.5 py-1.5 text-xs text-muted-foreground">
+        <ListChecks className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+        <span>
+          {selectedIds.size > 0
+            ? `已选择 ${selectedIds.size} 个文件，点击右上角“批量删除”`
+            : "勾选文件左侧复选框后，可在右上角批量删除"}
+        </span>
       </div>
 
       <div className="space-y-2">
@@ -125,17 +136,17 @@ export function ContextResourceList() {
                 className="min-w-0 flex-1 truncate text-meta font-medium text-muted-foreground"
                 title={folder === "__individual__" ? "Individual file imports" : folder}
               >
-                {folder === "__individual__" ? "Individual file imports" : folderName(folder)}
+                {folder === "__individual__" ? "单独导入的文件" : folderName(folder)}
               </span>
               {folder !== "__individual__" && (
                 <button
                   type="button"
                   onClick={() => handleRemoveFolder(folder, group.length)}
                   className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-meta text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  title="Delete all imported files from this folder"
+                  title="删除此文件夹导入的全部文件"
                 >
                   <Trash2 className="h-3 w-3" />
-                  删除文件夹
+                  删除此文件夹
                 </button>
               )}
             </div>

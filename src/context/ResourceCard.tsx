@@ -56,8 +56,8 @@ export function ResourceCard({ resource, onRemove, selected = false, onToggleSel
           type="checkbox"
           checked={selected}
           onChange={onToggleSelect}
-          aria-label={`Select ${resource.name}`}
-          className="mt-2 h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary"
+          aria-label={`选择 ${resource.name}`}
+          className="mt-2 h-4 w-4 shrink-0 cursor-pointer accent-primary"
         />
       )}
 

@@ -394,20 +394,20 @@ impl ContextManager {
         parts.join("\n")
     }
 
-    /// Return a bounded, always-available context slice for live interview
-    /// turns. Files whose names suggest a CV/profile/project/research summary
-    /// are preferred; if none are named that way, the first loaded resource is
-    /// used as a conservative fallback. Full papers and notes remain in the
-    /// cold RAG index instead of bloating every prompt.
+    /// Return a bounded profile slice for live interview turns.
+    ///
+    /// Only high-confidence personal/profile resources are eligible here.
+    /// Papers, project reports, and notes stay in the on-demand RAG index so a
+    /// single imported paper cannot bias unrelated interview questions.
     pub fn get_hot_context(&self, max_chars: usize, include_custom_instructions: bool) -> String {
         if max_chars == 0 {
             return String::new();
         }
 
         const HOT_TERMS: &[&str] = &[
-            "cv", "resume", "profile", "bio", "background", "motivation", "education",
-            "experience", "project", "research", "introduction", "professor", "advisor", "lab", "laboratory", "教授", "导师", "简历",
-            "背景", "经历", "动机", "教育", "项目", "研究", "个人介绍",
+            "cv", "resume", "curriculum", "profile", "bio", "biography", "background",
+            "motivation", "education", "experience", "personal", "about-me", "about_me",
+            "简历", "履历", "背景", "经历", "动机", "教育", "个人", "自我介绍", "个人介绍",
         ];
 
         let is_hot = |resource: &&ContextResource| {
@@ -415,12 +415,7 @@ impl ContextManager {
             HOT_TERMS.iter().any(|term| name.contains(term))
         };
 
-        let mut selected: Vec<&ContextResource> = self.resources.iter().filter(is_hot).collect();
-        if selected.is_empty() {
-            if let Some(first) = self.resources.first() {
-                selected.push(first);
-            }
-        }
+        let selected: Vec<&ContextResource> = self.resources.iter().filter(is_hot).collect();
 
         let mut sections = Vec::new();
         if include_custom_instructions && !self.custom_instructions.is_empty() {
@@ -489,8 +484,9 @@ impl ContextManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{ContextManager, ResourceCache};
+    use super::{CachedResource, ContextManager, ContextResource, ResourceCache};
     use std::fs;
+    use std::path::PathBuf;
     use uuid::Uuid;
 
     #[test]
@@ -531,5 +527,42 @@ mod tests {
 
         manager.cleanup_empty_storage_dir();
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn does_not_promote_a_paper_project_to_live_hot_context() {
+        let resource_id = "paper-project".to_string();
+        let mut cache = ResourceCache::new();
+        cache.insert(
+            resource_id.clone(),
+            CachedResource {
+                text: "CSI-Bench paper details".to_string(),
+                token_count: 4,
+                loaded_at: String::new(),
+            },
+        );
+
+        let manager = ContextManager {
+            context_dir: PathBuf::from("."),
+            resources: vec![ContextResource {
+                id: resource_id,
+                name: "CSI-Bench 论文复现项目.md".to_string(),
+                file_type: "md".to_string(),
+                file_path: String::new(),
+                size_bytes: 0,
+                token_count: 4,
+                preview: String::new(),
+                loaded_at: String::new(),
+                source_folder: String::new(),
+            }],
+            cache,
+            custom_instructions: String::new(),
+        };
+
+        let hot_context = manager.get_hot_context(12_000, false);
+        assert!(
+            hot_context.is_empty(),
+            "a paper/project resource must stay in on-demand RAG, not every live prompt"
+        );
     }
 }

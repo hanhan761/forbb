@@ -128,6 +128,12 @@ fn get_response_language_instruction(answer_language: Option<&str>) -> &'static 
     }
 }
 
+/// File context is opt-in at answer time. A direct answer must not inherit the
+/// first or most recently imported paper just because it exists in the library.
+fn should_include_hot_context(route: QueryRoute) -> bool {
+    route == QueryRoute::SearchFiles
+}
+
 #[cfg(test)]
 mod response_language_tests {
     use super::get_response_language_instruction;
@@ -155,6 +161,24 @@ mod response_language_tests {
     fn unknown_language_values_fall_back_to_chinese() {
         let instruction = get_response_language_instruction(Some("fr"));
         assert!(instruction.contains("Respond only in Simplified Chinese"));
+    }
+}
+
+#[cfg(test)]
+mod context_policy_tests {
+    use super::should_include_hot_context;
+    use crate::intelligence::query_router::QueryRoute;
+
+    #[test]
+    fn direct_answers_do_not_receive_file_hot_context() {
+        assert!(!should_include_hot_context(QueryRoute::QuickAnswer));
+        assert!(!should_include_hot_context(QueryRoute::AskCodex));
+        assert!(!should_include_hot_context(QueryRoute::SearchWeb));
+    }
+
+    #[test]
+    fn file_route_explicitly_allows_file_context() {
+        assert!(should_include_hot_context(QueryRoute::SearchFiles));
     }
 }
 
@@ -322,14 +346,18 @@ pub async fn generate_assist(
         _ => "normal".to_string(),
     };
 
-    // Hot Context is kept small and resident in every interview prompt. The
-    // larger paper/notes corpus is only searched when the router selects files.
-    let hot_context = state
-        .context
-        .as_ref()
-        .and_then(|context| context.lock().ok())
-        .map(|context| context.get_hot_context(12_000, include_instructions))
-        .unwrap_or_default();
+    // Keep file context opt-in. Otherwise a loaded paper can steer every
+    // unrelated question even when the route is QuickAnswer/Codex.
+    let hot_context = if should_include_hot_context(resolved_route) {
+        state
+            .context
+            .as_ref()
+            .and_then(|context| context.lock().ok())
+            .map(|context| context.get_hot_context(12_000, include_instructions))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
 
     // Resolve base system prompt: per-action config > active scenario > hardcoded template.
     // Active scenario is set by the frontend at meeting start based on the selected AI scenario.

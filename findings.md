@@ -155,3 +155,23 @@ Predictions and probes are recorded here before implementation so each fix can b
 - 主界面实际渲染 `ContextResourceList`，支持全选、批量删除、按来源目录删除；目录替换先导入新目录，再删除旧应用副本和索引。
 - 动态回答语言提示词只在后端统一注入，`zh`、`en`、`bilingual` 三种设置均有测试覆盖；中英双语明确要求中文段在前、英文段在后。
 - 全量 `cargo fmt --check` 的失败来自仓库原有无关格式差异，本轮未格式化全树；构建、测试和 diff 检查均通过。
+
+### 2026-09-17 用户复验反馈
+
+- 用户截图中的 `Sources` 区域仍没有明显的批量删除入口，且资源卡片没有选择框；当前源码虽包含旧版 `ContextResourceList`，但“删除选中”只有选中后才出现，“全选”使用 10px 弱化文字，无法作为可发现的批量管理入口。
+- 当前 `dist` bundle 能检索到旧版批量删除字符串，说明源码已进入构建，但用户打开的窗口仍可能是旧安装包或旧构建；新入口必须通过始终可见、带边框和明确中文文案的管理栏验证，而不能只依赖隐藏式卡片操作。
+- 用户最新截图确认透明度问题发生在 Windows 悬浮窗层：现有实现只设置 DOM/root 的 CSS alpha，Tauri 原生窗口及其子区域仍按不透明窗口合成。需要调用 Windows `SetLayeredWindowAttributes` 对 overlay 顶层 HWND 设置 alpha，并继续保留 CSS 透明背景以避免双重底色。
+- 回答语言的枚举、设置持久化和后端 bilingual 提示词已经存在，但默认状态仍为 `zh`；自动回答和手动回答大多依赖 IPC wrapper 从 store 回退读取，用户未主动切换时会持续看到中文单语。此次将默认改为 `bilingual`，同时在回答面板展示当前语言状态，后端继续约束“中文分区在前、English 分区在后”。
+
+### 2026-09-17 串题根因与修复
+
+- 用户截图的回答元数据是 `quick_answer`，但答案仍复述 CSI-Bench，说明问题不是路由把该问题送入论文检索，而是 `generate_assist` 原先无条件把 `ContextManager::get_hot_context()` 放进每次 prompt。
+- `get_hot_context()` 在没有高置信个人资料文件时还会回退到第一个资源；当第一个资源是“CSI-Bench 论文复现项目.md”时，论文正文会成为所有问题的隐式背景。
+- 现在只有 `SearchFiles` 路由允许文件热上下文；`QuickAnswer`、`AskCodex` 和 `SearchWeb` 不再注入任何常驻文件正文。论文、项目报告和笔记仍可由相关问题触发 RAG 检索。
+- 热上下文候选也收窄为明确的简历/个人资料命名，移除了 `project`、`research`、`项目`、`研究` 等会误识别论文的宽泛关键词，并删除“首个文件回退”。
+- 新增回归测试先在旧逻辑下失败，再在修复后通过；全量 Rust 测试为 74/74，前端构建和 Windows release/NSIS 构建均通过。
+
+### 2026-09-17 交付产物
+
+- 使用 Nature 写作工作流整理了 `docs/user-guide/knowledge-base-and-overlay.md`，按操作入口、步骤、预期结果和安全边界说明知识库、双语回答及整窗透明度，并从 Getting Started 加入链接。
+- Windows 安装包已生成：`src-tauri/target/release/bundle/nsis/NexQ_2.20.14_x64-setup.exe`。

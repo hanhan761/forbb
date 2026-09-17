@@ -93,6 +93,19 @@ function App() {
     });
   }, []);
 
+  // CSS alpha affects only the webview. Keep the native overlay HWND in sync
+  // so the complete floating window, including opaque child panels, fades as
+  // one surface on Windows.
+  useEffect(() => {
+    if (!windowLabel) return;
+    import("./lib/ipc").then(({ setOverlayOpacity }) => {
+      setOverlayOpacity(overlayOpacity).catch(() => {
+        // The browser/dev fallback has no Tauri command; CSS still provides
+        // a usable preview there.
+      });
+    });
+  }, [overlayOpacity, windowLabel]);
+
   // LAUNCHER window: when meeting starts, show overlay Tauri window and hide self
   useEffect(() => {
     if (windowLabel !== "launcher") return;
@@ -277,7 +290,7 @@ function App() {
     return (
       <div
         className="h-screen w-screen overflow-hidden text-foreground"
-        style={{ background: `hsl(var(--background) / ${overlayOpacity})` }}
+        style={{ background: "transparent" }}
       >
         <ErrorBoundary fallbackMessage="NexQ encountered an error">
           {currentView === "overlay" && (
@@ -303,7 +316,7 @@ function App() {
   return (
     <div
       className={`h-screen w-screen overflow-hidden text-foreground ${resolvedView === "overlay" ? "bg-transparent" : "bg-background"}`}
-      style={resolvedView === "overlay" ? { background: `hsl(var(--background) / ${overlayOpacity})` } : undefined}
+      style={resolvedView === "overlay" ? { background: isOverlayWindow ? "transparent" : `hsl(var(--background) / ${overlayOpacity})` } : undefined}
     >
       <ErrorBoundary fallbackMessage="NexQ encountered an error">
         {resolvedView === "launcher" && (
