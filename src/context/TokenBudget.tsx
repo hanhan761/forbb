@@ -1,5 +1,5 @@
 import { useContextStore } from "../stores/contextStore";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 
 export function TokenBudget() {
   const tokenBudget = useContextStore((s) => s.tokenBudget);
@@ -14,10 +14,23 @@ export function TokenBudget() {
   const isWarning = usagePercent > 80;
   const isCritical = usagePercent > 95;
 
-  // Filter out headroom for the visual bar segments
-  const visibleSegments = tokenBudget.segments.filter(
-    (s) => s.category !== "headroom" && s.tokens > 0
+  // Indexed files are searchable library content, not content sent wholesale
+  // in the current request. Keep them out of the active prompt meter so a
+  // large RAG library does not produce a false 100% warning.
+  const indexedSegments = tokenBudget.segments.filter(
+    (s) =>
+      s.category === "indexed" ||
+      s.category === "resume" ||
+      s.category === "jd" ||
+      s.category === "notes"
   );
+  const visibleSegments = tokenBudget.segments.filter(
+    (s) => s.category !== "headroom" && !indexedSegments.includes(s) && s.tokens > 0
+  );
+  const indexedTokens =
+    tokenBudget.indexed_total ??
+    indexedSegments.reduce((sum, segment) => sum + segment.tokens, 0);
+  const overBy = Math.max(usedTokens - limit, 0);
 
   const borderClass = isCritical
     ? "border-destructive/60"
@@ -33,7 +46,7 @@ export function TokenBudget() {
       <div className="mb-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground">
-            Token Budget
+            Prompt Token Budget
           </span>
           {(isWarning || isCritical) && (
             <AlertTriangle
@@ -45,7 +58,8 @@ export function TokenBudget() {
         </div>
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatNumber(usedTokens)} / {formatNumber(limit)} tokens used (
-          {usagePercent.toFixed(0)}%)
+          {usagePercent.toFixed(0)}%
+          {overBy > 0 ? ` · over by ${formatNumber(overBy)}` : ""})
         </span>
       </div>
 
@@ -53,7 +67,7 @@ export function TokenBudget() {
       <div
         className="h-2.5 w-full overflow-hidden rounded-full bg-muted/40"
         role="meter"
-        aria-label="Token budget usage"
+        aria-label="Active prompt token budget usage"
         aria-valuenow={usedTokens}
         aria-valuemin={0}
         aria-valuemax={limit}
@@ -95,6 +109,35 @@ export function TokenBudget() {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {indexedSegments.length > 0 && (
+        <div className="mt-3 rounded-lg border border-info/20 bg-info/5 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Info className="h-3.5 w-3.5 text-info" />
+              <span className="text-xs font-medium text-info/90">
+                Indexed knowledge base
+              </span>
+            </div>
+            <span className="text-meta tabular-nums text-muted-foreground">
+              ~{formatNumber(indexedTokens)} tokens
+            </span>
+          </div>
+          <p className="mt-1 text-meta leading-relaxed text-muted-foreground">
+            RAG retrieves relevant excerpts for each question; the entire library is not sent at once.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            {indexedSegments.map((segment, i) => (
+              <span
+                key={`indexed-${segment.category}-${i}`}
+                className="text-meta tabular-nums text-muted-foreground"
+              >
+                {segment.label}: ~{formatNumber(segment.tokens)}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

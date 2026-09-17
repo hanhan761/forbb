@@ -23,8 +23,13 @@ pub struct TokenBudgetSegment {
 /// The full token budget breakdown.
 #[derive(Debug, Clone, Serialize)]
 pub struct TokenBudget {
+    /// Estimated tokens sent in the active prompt (instructions + system
+    /// overhead + transcript). Indexed resources are retrieved on demand and
+    /// are not all sent in one request.
     pub total: usize,
     pub limit: u64,
+    /// Total tokens stored in the local knowledge-base index.
+    pub indexed_total: usize,
     pub segments: Vec<TokenBudgetSegment>,
 }
 
@@ -71,17 +76,20 @@ pub fn compute_budget(
 ) -> TokenBudget {
     let mut segments = Vec::new();
     let mut total: usize = 0;
+    let mut indexed_total: usize = 0;
 
-    // Add resource segments
+    // Resources are indexed locally and retrieved by relevance. They are not
+    // all injected into a single prompt, so keep them visible as a separate
+    // accounting bucket instead of making the active request look over limit.
     for res in resources {
-        let (label, color, category) = categorize_resource(&res.name, &res.file_type);
+        let (label, color, _category) = categorize_resource(&res.name, &res.file_type);
         segments.push(TokenBudgetSegment {
             label: label.to_string(),
             tokens: res.token_count,
             color: color.to_string(),
-            category: category.to_string(),
+            category: "indexed".to_string(),
         });
-        total += res.token_count;
+        indexed_total += res.token_count;
     }
 
     // Custom instructions segment
@@ -132,6 +140,7 @@ pub fn compute_budget(
     TokenBudget {
         total,
         limit,
+        indexed_total,
         segments,
     }
 }
@@ -156,5 +165,21 @@ mod tests {
         // 100 chars => 25 tokens
         let text = "a".repeat(100);
         assert_eq!(count_tokens(&text), 25);
+    }
+
+    #[test]
+    fn indexed_resources_do_not_consume_the_active_prompt_budget() {
+        let resources = vec![BudgetResource {
+            name: "large-notes.md".to_string(),
+            file_type: "md".to_string(),
+            token_count: 200_000,
+        }];
+
+        let budget = compute_budget(&resources, "", 0, 128_000);
+
+        assert!(
+            budget.total <= budget.limit as usize,
+            "indexed library content must not make the active prompt exceed its limit"
+        );
     }
 }

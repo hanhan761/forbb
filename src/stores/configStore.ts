@@ -49,7 +49,7 @@ const DEFAULT_GROQ_CONFIG: GroqConfig = {
 const STORE_FILE = "config.json";
 
 const DEFAULT_OVERLAY_OPACITY = 0.65;
-const ANSWER_LANGUAGE_SETTINGS_VERSION = 1;
+const ANSWER_LANGUAGE_SETTINGS_VERSION = 2;
 
 function normalizeOverlayOpacity(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -310,7 +310,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   autoTrigger: true,
   autoSummary: true,
   contextWindowSeconds: 120,
-  answerLanguage: "bilingual",
+  answerLanguage: "zh",
   startOnLogin: false,
   dataDirectory: "",
   firstRunCompleted: false,
@@ -746,20 +746,20 @@ export const useConfigStore = create<ConfigState>((set) => ({
       const contextWindowSeconds = await store.get<number>("contextWindowSeconds");
       const persistedAnswerLanguage = await store.get<string>("answerLanguage");
       const persistedAnswerLanguageVersion = await store.get<number>("answerLanguageVersion");
+      // Answers are single-language. Migrate the temporary legacy `bilingual`
+      // value to the safe Chinese default and preserve explicit zh/en choices.
       const storedAnswerLanguage: AnswerLanguage | undefined =
-        persistedAnswerLanguage === "zh" ||
-        persistedAnswerLanguage === "en" ||
-        persistedAnswerLanguage === "bilingual"
-          ? persistedAnswerLanguage
-          : undefined;
-      // `zh` was the product default before bilingual output became the
-      // default. Migrate that old implicit value once, while preserving an
-      // explicit choice made after this setting was introduced.
-      const answerLanguage: AnswerLanguage | undefined =
-        storedAnswerLanguage === "zh" && persistedAnswerLanguageVersion !== ANSWER_LANGUAGE_SETTINGS_VERSION
-          ? "bilingual"
-          : storedAnswerLanguage;
-      if (storedAnswerLanguage != null && persistedAnswerLanguageVersion !== ANSWER_LANGUAGE_SETTINGS_VERSION) {
+        persistedAnswerLanguage === "en"
+          ? "en"
+          : persistedAnswerLanguage === "zh" || persistedAnswerLanguage === "bilingual"
+            ? "zh"
+            : undefined;
+      const answerLanguage: AnswerLanguage | undefined = storedAnswerLanguage;
+      if (
+        storedAnswerLanguage != null &&
+        (persistedAnswerLanguageVersion !== ANSWER_LANGUAGE_SETTINGS_VERSION ||
+          persistedAnswerLanguage === "bilingual")
+      ) {
         await store.set("answerLanguage", answerLanguage);
         await store.set("answerLanguageVersion", ANSWER_LANGUAGE_SETTINGS_VERSION);
       }
@@ -1060,7 +1060,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
         if (val != null) set({ overlayOpacity: normalizeOverlayOpacity(val) });
       });
       store.onKeyChange<AnswerLanguage>("answerLanguage", (val) => {
-        if (val === "zh" || val === "en" || val === "bilingual") {
+        if (val === "zh" || val === "en") {
           set({ answerLanguage: val });
         }
       });

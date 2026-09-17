@@ -1,4 +1,4 @@
-# 知识库、双语回答与悬浮窗使用说明
+# 知识库、单语言回答与悬浮窗使用说明
 
 本文说明 NexQ 中三个容易混淆、但彼此独立的设置：知识库文件管理、回答输出语言，以及悬浮窗透明度。
 
@@ -36,16 +36,11 @@
 
 因此，若问题与 CSI-Bench 或其他论文无关，选择 **Quick** 可以得到最干净的直接回答；若问题确实询问你的项目、论文或笔记，选择 **My files**，或保留 **Auto** 让路由器判断。
 
-## 4. 设置中英双语回答
+## 4. 设置回答语言
 
-打开 Settings → Qwen，在 **回答输出语言** 中选择 **中英双语（中文在前）**。
+打开 Settings → Qwen，在 **回答输出语言** 中选择 **中文** 或 **English**。
 
-生成结果应固定分为两个部分：
-
-1. `中文`
-2. `English`
-
-回答面板在当前回答旁会显示 `中文 / English` 状态。若仍然只显示一种语言，先确认设置已保存，再重新生成一次回答；旧窗口或旧安装包不会包含本次提示词和界面改动。
+每次回答只输出一种语言，不会同时输出中文和 English。回答只保留直接答案，不追加 AI 的分析、推理或 `My Take` 段落。
 
 ## 5. 设置整个悬浮窗的透明度
 
@@ -62,7 +57,7 @@
 1. 先导入简历或个人介绍，再按需导入论文和项目笔记。
 2. 普通面试问答使用 **Auto** 或 **Quick**。
 3. 需要核对论文细节时切换到 **My files**。
-4. 默认使用 **中英双语（中文在前）**，方便阅读和直接复述。
+4. 默认使用 **中文**；需要英文回答时，在 Qwen 设置中切换到 **English**。
 5. 更换知识库时使用 **Replace**，不要手动删除原始文件夹。
 
 ## English quick reference
@@ -71,5 +66,5 @@
 - **Replace** imports the new folder before removing old app-managed copies and indexes.
 - **Batch Delete** removes checked resources; source files are preserved.
 - **Quick** answers without resident paper context; **My files** enables local retrieval.
-- Set **回答输出语言** to **中英双语（中文在前）** for Chinese-first bilingual answers.
+- Set **回答输出语言** to **中文** or **English**; each answer uses only the selected language.
 - **Overlay Transparency** applies to the complete native overlay window and is persisted.

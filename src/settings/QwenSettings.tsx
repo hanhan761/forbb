@@ -12,6 +12,7 @@ import {
   testLLMConnection,
   testSTTConnection,
 } from "../lib/ipc";
+import type { AnswerLanguage } from "../lib/types";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
@@ -219,19 +220,18 @@ export function QwenSettings() {
         <div>
           <h3 className="text-sm font-semibold text-foreground">回答输出语言</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            控制 Qwen 回答的输出语言；选择中英双语时始终先中文、后 English。
+            选择中文或 English，回答只输出一种语言，不会同时输出中英文。
           </p>
         </div>
         <label className="block space-y-2 text-sm text-foreground">
           <span>回答语言</span>
           <select
             value={answerLanguage}
-            onChange={(event) => setAnswerLanguage(event.target.value as "zh" | "en" | "bilingual")}
+            onChange={(event) => setAnswerLanguage(event.target.value as AnswerLanguage)}
             className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none"
           >
             <option value="zh">中文</option>
             <option value="en">English</option>
-            <option value="bilingual">中英双语（中文在前）</option>
           </select>
         </label>
       </section>

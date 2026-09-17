@@ -40,7 +40,6 @@ export function AIResponsePanel({ compact = false }: { compact?: boolean }) {
   const aiResponseLineHeight = useConfigStore((s) => s.aiResponseLineHeight ?? 1.6);
   const aiResponseHPad = useConfigStore((s) => s.aiResponseHPad ?? 0);
   const aiResponseAlign = useConfigStore((s) => s.aiResponseAlign ?? "left");
-  const answerLanguage = useConfigStore((s) => s.answerLanguage);
   const setAiResponseFontSize = useConfigStore((s) => s.setAiResponseFontSize);
   const setAiResponseTextColor = useConfigStore((s) => s.setAiResponseTextColor);
   const setAiResponseLineHeight = useConfigStore((s) => s.setAiResponseLineHeight);
@@ -197,11 +196,6 @@ export function AIResponsePanel({ compact = false }: { compact?: boolean }) {
                   <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-meta font-medium text-primary/80">
                     {getModeLabel(currentMode)}
                   </span>
-                  {answerLanguage === "bilingual" && (
-                    <span className="rounded-full bg-success/10 px-2 py-0.5 text-meta font-medium text-success/80">
-                      中文 / English
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-1">
                   <ActionButton

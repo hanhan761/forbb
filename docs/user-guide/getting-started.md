@@ -94,7 +94,7 @@ The meeting is saved automatically with full transcript, AI interactions, and su
 - [Audio Setup Guide](audio-setup.md) -- Detailed audio device configuration and troubleshooting
 - [AI Providers Guide](ai-providers.md) -- Compare all STT and LLM providers to find the best fit
 - [Using Context Intelligence (RAG)](rag-context.md) -- Load documents for AI-enhanced responses
-- [Knowledge Base and Overlay Guide](knowledge-base-and-overlay.md) -- Manage files, bilingual answers, and complete overlay transparency
+- [Knowledge Base and Overlay Guide](knowledge-base-and-overlay.md) -- Manage files, single-language answers, and complete overlay transparency
 - [Configuration Guide](configuration.md) -- Full provider setup and configuration options
 - [Keyboard Shortcuts](keyboard-shortcuts.md) -- Full shortcuts reference
 - [Troubleshooting](troubleshooting.md) -- Common issues and solutions

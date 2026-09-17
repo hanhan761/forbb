@@ -73,14 +73,15 @@ function makeResources(): ContextResource[] {
 
 function makeTokenBudget(): TokenBudget {
   return {
-    total: 5296,
+    total: 450,
     limit: 16000,
+    indexed_total: 5296,
     segments: [
-      { label: 'Resume', tokens: 1847, color: '#3b82f6', category: 'resume' },
-      { label: 'Job Description', tokens: 2103, color: '#8b5cf6', category: 'jd' },
-      { label: 'Notes', tokens: 1346, color: '#10b981', category: 'notes' },
+      { label: 'Resume', tokens: 1847, color: '#3b82f6', category: 'indexed' },
+      { label: 'Job Description', tokens: 2103, color: '#8b5cf6', category: 'indexed' },
+      { label: 'Notes', tokens: 1346, color: '#10b981', category: 'indexed' },
       { label: 'System Prompt', tokens: 450, color: '#6b7280', category: 'system' },
-      { label: 'Headroom', tokens: 10254, color: '#27272a', category: 'headroom' },
+      { label: 'Headroom', tokens: 15550, color: '#27272a', category: 'headroom' },
     ],
   };
 }

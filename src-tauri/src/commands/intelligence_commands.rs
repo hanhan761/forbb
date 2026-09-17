@@ -34,9 +34,9 @@ fn compose_instructions(presets: &InstructionPresets, custom: &str) -> String {
         };
         parts.push(text);
     }
-    if presets.opinion.as_deref() == Some("add") {
-        parts.push("After answering based on the provided context, add a short section '## My Take' with your own analysis, interpretation, or recommendation — clearly separated from the factual answer above.".to_string());
-    }
+    // Answers are intentionally factual and direct. Keep the legacy `opinion`
+    // field deserializable for old config files, but never add a separate AI
+    // analysis section to a generated answer.
     let prefix = parts.join(" ");
     if !prefix.is_empty() && !custom.is_empty() {
         format!("{} {}", prefix, custom)
@@ -111,19 +111,15 @@ fn count_total_segments(segments_json: &str) -> usize {
 
 /// Build the language directive for generated AI assistance.
 ///
-/// The frontend persists one of `zh`, `en`, or `bilingual`. Unknown and
-/// missing values deliberately fall back to the product's original Chinese
-/// behavior so old clients and old config files remain compatible.
+/// The frontend persists one of `zh` or `en`. Unknown and legacy `bilingual`
+/// values deliberately fall back to the product's original Chinese behavior.
 fn get_response_language_instruction(answer_language: Option<&str>) -> &'static str {
     match answer_language.map(str::trim) {
         Some("en") => {
-            "Respond only in English. Do not adapt the response language to the interviewer's language or the transcript. Keep the wording natural and concise; when the mode asks for a speakable answer, make it easy to read aloud."
-        }
-        Some("bilingual") => {
-            "Respond in exactly two clearly separated sections: first Simplified Chinese under the heading `中文`, then English under the heading `English`. Do not mix Chinese and English within a section, do not repeat either section, and do not adapt this order to the interviewer's language or the transcript. Keep both sections natural and concise; when the mode asks for a speakable answer, make each version easy to read aloud."
+            "Respond only in English. Output only the direct answer. Do not add analysis, reasoning, a preamble, meta-commentary, or a `## My Take` section. Do not adapt the response language to the interviewer's language or the transcript. Keep the wording natural and concise; when the mode asks for a speakable answer, make it easy to read aloud."
         }
         _ => {
-            "Respond only in Simplified Chinese. Do not adapt the response language to the interviewer's language or the transcript. Keep the wording natural and concise; when the mode asks for a speakable answer, make it easy to read aloud."
+            "Respond only in Simplified Chinese. Output only the direct answer. Do not add analysis, reasoning, a preamble, meta-commentary, or a `## My Take` section. Do not adapt the response language to the interviewer's language or the transcript. Keep the wording natural and concise; when the mode asks for a speakable answer, make it easy to read aloud."
         }
     }
 }
@@ -146,15 +142,20 @@ mod response_language_tests {
     }
 
     #[test]
-    fn supports_english_and_bilingual_output() {
+    fn supports_english_without_bilingual_output() {
         let english = get_response_language_instruction(Some("en"));
         assert!(english.contains("Respond only in English"));
 
         let bilingual = get_response_language_instruction(Some("bilingual"));
-        assert!(bilingual.contains("first Simplified Chinese"));
-        assert!(bilingual.contains("then English"));
-        assert!(bilingual.contains("`中文`"));
-        assert!(bilingual.contains("`English`"));
+        assert!(bilingual.contains("Respond only in Simplified Chinese"));
+        assert!(!bilingual.contains("then English"));
+    }
+
+    #[test]
+    fn answers_must_not_include_ai_analysis() {
+        let instruction = get_response_language_instruction(Some("zh"));
+        assert!(instruction.contains("Do not add analysis"));
+        assert!(instruction.contains("Output only the direct answer"));
     }
 
     #[test]

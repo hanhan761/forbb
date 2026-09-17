@@ -219,7 +219,7 @@ export interface AIInteraction {
 }
 
 /** Language used for generated AI answers (separate from live translation). */
-export type AnswerLanguage = "zh" | "en" | "bilingual";
+export type AnswerLanguage = "zh" | "en";
 
 export type IntelligenceMode =
   | "Assist"
@@ -513,6 +513,7 @@ export type ContextFileType = "pdf" | "txt" | "md" | "docx";
 export interface TokenBudget {
   total: number;
   limit: number;
+  indexed_total: number;
   segments: TokenBudgetSegment[];
 }
 
@@ -520,7 +521,7 @@ export interface TokenBudgetSegment {
   label: string;
   tokens: number;
   color: string;
-  category: "resume" | "jd" | "notes" | "transcript" | "system" | "headroom";
+  category: "resume" | "jd" | "notes" | "indexed" | "transcript" | "system" | "headroom";
 }
 
 // == QUESTION DETECTION ==

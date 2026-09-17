@@ -144,11 +144,6 @@ function composeInstructions(presets: InstructionPresets, custom: string): strin
     };
     parts.push(lengthMap[presets.length] || `${presets.length} responses.`);
   }
-  if (presets.opinion === "add") {
-    parts.push(
-      "After answering based on the provided context, add a short section '## My Take' with your own analysis, interpretation, or recommendation — clearly separated from the factual answer above."
-    );
-  }
   const prefix = parts.join(" ");
   if (prefix && custom) return `${prefix} ${custom}`;
   return prefix || custom;
@@ -184,6 +179,13 @@ export const useAIActionsStore = create<AIActionsState>((set, get) => ({
         const merged: AllActionConfigs = {
           ...defaults,
           ...saved,
+          // Keep the legacy field for config compatibility, but answers are
+          // always factual/direct and never append a separate AI analysis.
+          instructionPresets: {
+            ...defaults.instructionPresets,
+            ...saved.instructionPresets,
+            opinion: null,
+          },
           actions: { ...defaults.actions, ...saved.actions },
         };
         set({ configs: merged, isLoaded: true });
